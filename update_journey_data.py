@@ -73,6 +73,14 @@ def get_journey_plan(origin, destination):
     print(f"[{datetime.now().strftime('%H:%M:%S')}] Fetching journeys from {origin} to {destination}...")
     try:
         json_data = retry_fetch(url, params)
+        
+        # --- VERBOSE LOGGING START ---
+        if json_data:
+            print("\n--- FULL TFL API RESPONSE (START) ---")
+            print(json.dumps(json_data, indent=4))
+            print("--- FULL TFL API RESPONSE (END) ---\n")
+        # --- VERBOSE LOGGING END ---
+
         return json_data
     except Exception as e:
         print(f"CRITICAL ERROR: Failed to get journey plan after all retries: {e}")
@@ -154,10 +162,14 @@ def get_journey_status(first_leg, second_leg):
     
     return status
 
-def process_journey(journey, id_num):
+def process_journey(journey, log_id):
     """
     Extracts key information from a raw TFL journey object, validates the transfer,
     and enriches with real-time data.
+    
+    Args:
+        journey (dict): The raw TFL journey object.
+        log_id (int): The index of the journey (1-based) from the TFL response, used for logging.
     """
     
     # Find the legs we care about (first train and second train)
@@ -165,7 +177,7 @@ def process_journey(journey, id_num):
 
     # CRITICAL CHECK 1: If no national-rail or overground legs were found, skip this journey.
     if not first_leg_raw:
-        print(f"   Journey {id_num} skipped: No primary train leg found for processing.")
+        print(f"   Journey {log_id} skipped: No primary train leg found for processing.")
         return None
 
     # Check if the journey requires a change (One Change)
@@ -178,7 +190,7 @@ def process_journey(journey, id_num):
     # If the journey is a transfer, we MUST have a second leg
     if num_changes == 1 and not second_leg_raw:
         # This can happen if the second leg is non-train (e.g., walk, bus) which we filtered out
-        print(f"   Journey {id_num} skipped: One Change journey does not have a subsequent train leg.")
+        print(f"   Journey {log_id} skipped: One Change journey does not have a subsequent train leg.")
         return None
 
     # --- Robust Time Extraction and Transfer Validation ---
@@ -208,16 +220,16 @@ def process_journey(journey, id_num):
             transfer_time_minutes = int(time_difference.total_seconds() / 60)
             
             if transfer_time_minutes < MIN_TRANSFER_TIME_MINUTES:
-                print(f"   Journey {id_num} skipped: Transfer time of {transfer_time_minutes} min is less than the minimum required {MIN_TRANSFER_TIME_MINUTES} min.")
+                print(f"   Journey {log_id} skipped: Transfer time of {transfer_time_minutes} min is less than the minimum required {MIN_TRANSFER_TIME_MINUTES} min.")
                 return None
                 
     except KeyError as e:
         # Catches the 'departureTime' or 'arrivalPoint' missing error
-         print(f"   Journey {id_num} skipped: Critical journey data missing ({e}). Skipping malformed journey.")
+         print(f"   Journey {log_id} skipped: Critical journey data missing ({e}). Skipping malformed journey.")
          return None
     except ValueError:
         # Catches malformed time strings (e.g., if it's not ISO format)
-         print(f"   Journey {id_num} skipped: Time data is in an invalid format. Skipping malformed journey.")
+         print(f"   Journey {log_id} skipped: Time data is in an invalid format. Skipping malformed journey.")
          return None
 
     # --- Live Data Enrichment ---
@@ -291,8 +303,9 @@ def process_journey(journey, id_num):
     # Use the status from the overall journey status checker
     overall_status = get_journey_status(first_leg_raw, second_leg_raw)
 
+    # Note: 'id' is intentionally omitted here and will be assigned sequentially
+    # in fetch_and_process_tfl_data based on the order of successful processing.
     return {
-        "id": id_num,
         "type": "One Change" if num_changes == 1 else "Direct",
         "departureTime": processed_legs[0]['departure'],
         "arrivalTime": processed_legs[-1]['arrival'],
@@ -318,10 +331,13 @@ def fetch_and_process_tfl_data(num_journeys):
     processed = []
     for idx, journey in enumerate(journeys, 1):
         try:
-            processed_journey = process_journey(journey, len(processed) + 1)
+            # Pass the raw index 'idx' for logging purposes during skipping/error reporting
+            processed_journey = process_journey(journey, idx)
             if processed_journey:
+                # Assign the final sequential ID based on successful processing order
+                processed_journey['id'] = len(processed) + 1
                 processed.append(processed_journey)
-                print(f"✓ Journey {len(processed)} ({processed_journey['type']}): {processed_journey['departureTime']} → {processed_journey['arrivalTime']} | Status: {processed_journey['status']}")
+                print(f"✓ Journey {processed_journey['id']} ({processed_journey['type']}): {processed_journey['departureTime']} → {processed_journey['arrivalTime']} | Status: {processed_journey['status']}")
                 
                 if len(processed) >= num_journeys:
                     break
@@ -351,4 +367,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
