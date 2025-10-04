@@ -142,7 +142,8 @@ def get_journey_status(first_leg, second_leg):
     """Determine the overall status based on leg delays."""
     status = "On Time"
     
-    first_delay = first_leg.get('departureDelay', 0)
+    # Ensure legs are not None before accessing properties
+    first_delay = first_leg.get('departureDelay', 0) if first_leg else 0
     second_delay = second_leg.get('departureDelay', 0) if second_leg else 0
 
     if first_delay > 0 or second_delay > 0:
@@ -158,40 +159,45 @@ def process_journey(journey, id_num):
     and enriches with real-time data.
     """
     
-    # Check if the journey requires a change (One Change)
-    num_changes = journey.get('journeyAts', {}).get('numChanges', 0)
-    
     # Find the legs we care about (first train and second train)
     first_leg_raw, second_leg_raw = find_legs_to_monitor(journey)
 
+    # CRITICAL CHECK: If no national-rail or overground legs were found, skip this journey.
+    if not first_leg_raw:
+        print(f"   Journey {id_num} skipped: No primary train leg found for processing.")
+        return None
+
+    # Check if the journey requires a change (One Change)
+    num_changes = journey.get('journeyAts', {}).get('numChanges', 0)
+    
     # We only care about Direct (0 changes) or One Change (1 change)
     if num_changes > 1:
         return None
     
     # If the journey is a transfer, we MUST have a second leg
     if num_changes == 1 and not second_leg_raw:
-        print(f"   Journey {id_num} skipped: One Change journey structure is invalid (missing second leg).")
+        # This can happen if the second leg is non-train (e.g., walk, bus) which we filtered out
+        print(f"   Journey {id_num} skipped: One Change journey does not have a subsequent train leg.")
         return None
 
     # --- Validate Transfer Time (CRITICAL for "No valid stitched journeys" issue) ---
     if num_changes == 1:
         transfer_time_minutes = 0
         
-        # Iterate through legs to find the transfer leg and extract time
-        for leg in journey.get('legs', []):
-            if leg.get('path', {}).get('stopPoints'):
-                # Transfer time is often the difference between arrival of first leg and departure of second leg
-                
-                # Get arrival time of first leg
-                first_arrival_time = datetime.fromisoformat(first_leg_raw['arrivalPoint']['arrivalTime'])
-                
-                # Get departure time of second leg
-                second_departure_time = datetime.fromisoformat(second_leg_raw['departurePoint']['departureTime'])
-                
-                time_difference = second_departure_time - first_arrival_time
-                transfer_time_minutes = int(time_difference.total_seconds() / 60)
-                
-                break
+        # Calculate transfer time using the raw leg data we already isolated
+        # Get arrival time of first leg
+        try:
+            first_arrival_time = datetime.fromisoformat(first_leg_raw['arrivalPoint']['arrivalTime'])
+            
+            # Get departure time of second leg
+            second_departure_time = datetime.fromisoformat(second_leg_raw['departurePoint']['departureTime'])
+            
+            time_difference = second_departure_time - first_arrival_time
+            transfer_time_minutes = int(time_difference.total_seconds() / 60)
+        except KeyError:
+            # Handle case where arrival/departure time structure is unexpected
+             print(f"   Journey {id_num} skipped: Error calculating transfer time due to missing time data.")
+             return None
 
         if transfer_time_minutes < MIN_TRANSFER_TIME_MINUTES:
             print(f"   Journey {id_num} skipped: Transfer time of {transfer_time_minutes} min is less than the minimum required {MIN_TRANSFER_TIME_MINUTES} min.")
@@ -200,6 +206,7 @@ def process_journey(journey, id_num):
     # --- Live Data Enrichment ---
     
     # 1. First Leg (Origin to Interchange)
+    # The dictionary lookup handles missing Naptan IDs gracefully by returning None
     first_leg_naptan = NAPTAN_IDS.get(first_leg_raw['departurePoint']['commonName'])
     first_leg_arrivals = get_live_arrivals(first_leg_naptan) if first_leg_naptan else None
     
@@ -236,6 +243,7 @@ def process_journey(journey, id_num):
         "destination": first_leg_raw['arrivalPoint']['commonName'],
         "departure": datetime.fromisoformat(first_leg_raw['departurePoint']['departureTime']).strftime('%H:%M'),
         "arrival": datetime.fromisoformat(first_leg_raw['arrivalPoint']['arrivalTime']).strftime('%H:%M'),
+        # Dynamic key for platform, e.g., "departurePlatform_Streatham"
         f"departurePlatform_{first_leg_raw['departurePoint']['commonName'].split(' ')[0]}": first_platform,
         "operator": first_leg_raw.get('operator', {}).get('id', 'N/A'),
         "status": first_leg_raw.get('status', 'On Time'),
@@ -255,6 +263,7 @@ def process_journey(journey, id_num):
             "destination": second_leg_raw['arrivalPoint']['commonName'],
             "departure": datetime.fromisoformat(second_leg_raw['departurePoint']['departureTime']).strftime('%H:%M'),
             "arrival": datetime.fromisoformat(second_leg_raw['arrivalPoint']['arrivalTime']).strftime('%H:%M'),
+            # Dynamic key for platform, e.g., "departurePlatform_Clapham"
             f"departurePlatform_{second_leg_raw['departurePoint']['commonName'].split(' ')[0]}": second_platform,
             "operator": second_leg_raw.get('operator', {}).get('id', 'N/A'),
             "status": second_leg_raw.get('status', 'On Time'),
@@ -263,13 +272,16 @@ def process_journey(journey, id_num):
     # Total duration is returned as minutes from TFL
     total_duration_minutes = journey.get('duration', 'N/A')
     
+    # Use the status from the overall journey status checker
+    overall_status = get_journey_status(first_leg_raw, second_leg_raw)
+
     return {
         "id": id_num,
         "type": "One Change" if num_changes == 1 else "Direct",
         "departureTime": processed_legs[0]['departure'],
         "arrivalTime": processed_legs[-1]['arrival'],
         "totalDuration": f"{total_duration_minutes} min",
-        "status": get_journey_status(first_leg_raw, second_leg_raw),
+        "status": overall_status,
         "live_updated_at": current_time,
         "legs": processed_legs
     }
@@ -298,11 +310,13 @@ def fetch_and_process_tfl_data(num_journeys):
                 if len(processed) >= num_journeys:
                     break
         except Exception as e:
+            # Catching generic errors inside the loop helps the script process subsequent journeys
             print(f"ERROR processing journey {idx}: {e}")
             continue
     
     if len(processed) == 0:
-        print(f"\n⚠ No valid stitched journeys found with a minimum {MIN_TRANSFER_TIME_MINUTES}-minute transfer.")
+        # Reverting to the old message style for clarity, removing "stitched" since we process direct/one change
+        print(f"\n⚠ No valid rail journeys found with a maximum of one change and a minimum {MIN_TRANSFER_TIME_MINUTES}-minute transfer.")
         
     print(f"\nSuccessfully processed {len(processed)} train journeys (Direct or One Change)")
     return processed
@@ -321,4 +335,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
