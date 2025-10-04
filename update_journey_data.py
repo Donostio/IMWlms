@@ -115,6 +115,7 @@ def find_legs_to_monitor(journey):
     first_leg = train_legs[0]
     
     # Second leg (The trip from the interchange to the destination)
+    # This limits us to a maximum of one change (two train legs)
     second_leg = train_legs[1] if len(train_legs) > 1 else None
 
     return first_leg, second_leg
@@ -172,7 +173,8 @@ def process_journey(journey, log_id):
         log_id (int): The index of the journey (1-based) from the TFL response, used for logging.
     """
     
-    # Find the legs we care about (first train and second train)
+    # Find the legs we care about (first train and second train). 
+    # find_legs_to_monitor implicitly handles max 2 train legs (Max One Change).
     first_leg_raw, second_leg_raw = find_legs_to_monitor(journey)
 
     # CRITICAL CHECK 1: If no national-rail or overground legs were found, skip this journey.
@@ -180,25 +182,15 @@ def process_journey(journey, log_id):
         print(f"   Journey {log_id} skipped: No primary train leg found for processing.")
         return None
 
-    # Check if the journey requires a change (One Change)
-    num_changes = journey.get('journeyAts', {}).get('numChanges', 0)
+    # --- Determine Journey Type based on available train legs (more robust than TFL's 'journeyAts') ---
+    # A transfer exists if a second train leg was found.
+    is_transfer = second_leg_raw is not None
+    num_changes = 1 if is_transfer else 0
     
-    # We only care about Direct (0 changes) or One Change (1 change)
-    if num_changes > 1:
-        return None
-    
-    # If the journey is a transfer, we MUST have a second leg
-    if num_changes == 1 and not second_leg_raw:
-        # This can happen if the second leg is non-train (e.g., walk, bus) which we filtered out
-        print(f"   Journey {log_id} skipped: One Change journey does not have a subsequent train leg.")
-        return None
-
     # --- Robust Time Extraction and Transfer Validation ---
     
     try:
         # First Leg Times
-        # FIX: The departure and arrival times are direct properties of the leg object, 
-        # not nested under departurePoint/arrivalPoint.
         first_departure_time_str = first_leg_raw['departureTime']
         first_arrival_time_str = first_leg_raw['arrivalTime']
         
@@ -208,7 +200,6 @@ def process_journey(journey, log_id):
         transfer_time_minutes = 0
         if num_changes == 1:
             # Second Leg Times (required for transfer calculation)
-            # FIX: Same correction for the second leg times.
             second_departure_time_str = second_leg_raw['departureTime']
             second_arrival_time_str = second_leg_raw['arrivalTime']
 
@@ -335,7 +326,8 @@ def fetch_and_process_tfl_data(num_journeys):
     for idx, journey in enumerate(journeys, 1):
         try:
             # Pass the raw index 'idx' for logging purposes during skipping/error reporting
-            processed_journey = process_journey(journey, idx)
+            # Note: We remove the previously sequence-assigned ID for logging in favor of TFL's raw index
+            processed_journey = process_journey(journey, idx) 
             if processed_journey:
                 # Assign the final sequential ID based on successful processing order
                 processed_journey['id'] = len(processed) + 1
@@ -370,6 +362,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
