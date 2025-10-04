@@ -16,8 +16,8 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          # Required to fetch the full history, otherwise the Python script can't read the existing data.json
-          fetch-depth: 0 
+          # Required to fetch the full history so fetch_data.py can read data.json
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -28,20 +28,17 @@ jobs:
         run: pip install requests
 
       - name: Run Python data fetch script
-        # This script handles the API call, parsing, appending the snapshot, and rewriting data.json
         run: python fetch_data.py
 
       - name: Check for changes
         id: git_status
-        # Check if data.json was modified
         run: echo "changes=$(git status --porcelain | wc -l)" >> $GITHUB_OUTPUT
 
       - name: Commit and Push changes
-        # Only commit if changes were detected (i.e., if fetch_data.py updated data.json)
-        if: steps.git_status.outputs.changes > 0
+        if: steps.git_status.outputs.changes != '0'
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "Data Update: New Darwin snapshot added"
-          # IMPORTANT: Replace 'main' with your repository's default branch name (e.g., master)
           branch: main
+
 
