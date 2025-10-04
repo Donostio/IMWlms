@@ -39,6 +39,7 @@ def retry_fetch(url, params, max_retries=MAX_RETRIES):
         except requests.exceptions.HTTPError as e:
             # Handle specific 404 error gracefully for the StopPoint/Arrivals endpoint
             if response.status_code == 404 and "StopPoint" in url:
+                # This 404 is common for National Rail stops on this specific TFL API.
                 print(f"ERROR fetching data from TFL StopPoint API for {url.split('/')[4]}: 404 Client Error: Not Found.")
                 return None # Return None on 404 for Arrivals lookup, allowing script to proceed
             
@@ -162,7 +163,7 @@ def process_journey(journey, id_num):
     # Find the legs we care about (first train and second train)
     first_leg_raw, second_leg_raw = find_legs_to_monitor(journey)
 
-    # CRITICAL CHECK: If no national-rail or overground legs were found, skip this journey.
+    # CRITICAL CHECK 1: If no national-rail or overground legs were found, skip this journey.
     if not first_leg_raw:
         print(f"   Journey {id_num} skipped: No primary train leg found for processing.")
         return None
@@ -180,33 +181,48 @@ def process_journey(journey, id_num):
         print(f"   Journey {id_num} skipped: One Change journey does not have a subsequent train leg.")
         return None
 
-    # --- Validate Transfer Time (CRITICAL for "No valid stitched journeys" issue) ---
-    if num_changes == 1:
-        transfer_time_minutes = 0
+    # --- Robust Time Extraction and Transfer Validation ---
+    
+    try:
+        # First Leg Times
+        first_departure_time_str = first_leg_raw['departurePoint']['departureTime']
+        first_arrival_time_str = first_leg_raw['arrivalPoint']['arrivalTime']
         
-        # Calculate transfer time using the raw leg data we already isolated
-        # Get arrival time of first leg
-        try:
-            first_arrival_time = datetime.fromisoformat(first_leg_raw['arrivalPoint']['arrivalTime'])
+        first_departure_time_formatted = datetime.fromisoformat(first_departure_time_str).strftime('%H:%M')
+        first_arrival_time_formatted = datetime.fromisoformat(first_arrival_time_str).strftime('%H:%M')
+        
+        transfer_time_minutes = 0
+        if num_changes == 1:
+            # Second Leg Times (required for transfer calculation)
+            second_departure_time_str = second_leg_raw['departurePoint']['departureTime']
+            second_arrival_time_str = second_leg_raw['arrivalPoint']['arrivalTime']
+
+            second_departure_time_formatted = datetime.fromisoformat(second_departure_time_str).strftime('%H:%M')
+            second_arrival_time_formatted = datetime.fromisoformat(second_arrival_time_str).strftime('%H:%M')
             
-            # Get departure time of second leg
-            second_departure_time = datetime.fromisoformat(second_leg_raw['departurePoint']['departureTime'])
+            # Calculate transfer time
+            first_arrival_time = datetime.fromisoformat(first_arrival_time_str)
+            second_departure_time = datetime.fromisoformat(second_departure_time_str)
             
             time_difference = second_departure_time - first_arrival_time
             transfer_time_minutes = int(time_difference.total_seconds() / 60)
-        except KeyError:
-            # Handle case where arrival/departure time structure is unexpected
-             print(f"   Journey {id_num} skipped: Error calculating transfer time due to missing time data.")
-             return None
+            
+            if transfer_time_minutes < MIN_TRANSFER_TIME_MINUTES:
+                print(f"   Journey {id_num} skipped: Transfer time of {transfer_time_minutes} min is less than the minimum required {MIN_TRANSFER_TIME_MINUTES} min.")
+                return None
+                
+    except KeyError as e:
+        # Catches the 'departureTime' or 'arrivalPoint' missing error
+         print(f"   Journey {id_num} skipped: Critical journey data missing ({e}). Skipping malformed journey.")
+         return None
+    except ValueError:
+        # Catches malformed time strings (e.g., if it's not ISO format)
+         print(f"   Journey {id_num} skipped: Time data is in an invalid format. Skipping malformed journey.")
+         return None
 
-        if transfer_time_minutes < MIN_TRANSFER_TIME_MINUTES:
-            print(f"   Journey {id_num} skipped: Transfer time of {transfer_time_minutes} min is less than the minimum required {MIN_TRANSFER_TIME_MINUTES} min.")
-            return None
-    
     # --- Live Data Enrichment ---
     
     # 1. First Leg (Origin to Interchange)
-    # The dictionary lookup handles missing Naptan IDs gracefully by returning None
     first_leg_naptan = NAPTAN_IDS.get(first_leg_raw['departurePoint']['commonName'])
     first_leg_arrivals = get_live_arrivals(first_leg_naptan) if first_leg_naptan else None
     
@@ -215,7 +231,7 @@ def process_journey(journey, id_num):
         first_platform = get_platform_from_tfl_arrivals(
             first_leg_arrivals, 
             first_leg_raw.get('line', {}).get('id'), # Use line ID as a train identifier
-            first_leg_raw['departurePoint']['departureTime']
+            first_departure_time_str # Use the raw time string
         )
     
     # 2. Second Leg (Interchange to Destination, only for changes)
@@ -228,7 +244,7 @@ def process_journey(journey, id_num):
             second_platform = get_platform_from_tfl_arrivals(
                 second_leg_arrivals, 
                 second_leg_raw.get('line', {}).get('id'), # Use line ID as a train identifier
-                second_leg_raw['departurePoint']['departureTime']
+                second_departure_time_str # Use the raw time string
             )
 
     # --- Construct Final Data ---
@@ -241,8 +257,8 @@ def process_journey(journey, id_num):
     processed_legs.append({
         "origin": first_leg_raw['departurePoint']['commonName'],
         "destination": first_leg_raw['arrivalPoint']['commonName'],
-        "departure": datetime.fromisoformat(first_leg_raw['departurePoint']['departureTime']).strftime('%H:%M'),
-        "arrival": datetime.fromisoformat(first_leg_raw['arrivalPoint']['arrivalTime']).strftime('%H:%M'),
+        "departure": first_departure_time_formatted,
+        "arrival": first_arrival_time_formatted,
         # Dynamic key for platform, e.g., "departurePlatform_Streatham"
         f"departurePlatform_{first_leg_raw['departurePoint']['commonName'].split(' ')[0]}": first_platform,
         "operator": first_leg_raw.get('operator', {}).get('id', 'N/A'),
@@ -261,8 +277,8 @@ def process_journey(journey, id_num):
         processed_legs.append({
             "origin": second_leg_raw['departurePoint']['commonName'],
             "destination": second_leg_raw['arrivalPoint']['commonName'],
-            "departure": datetime.fromisoformat(second_leg_raw['departurePoint']['departureTime']).strftime('%H:%M'),
-            "arrival": datetime.fromisoformat(second_leg_raw['arrivalPoint']['arrivalTime']).strftime('%H:%M'),
+            "departure": second_departure_time_formatted,
+            "arrival": second_arrival_time_formatted,
             # Dynamic key for platform, e.g., "departurePlatform_Clapham"
             f"departurePlatform_{second_leg_raw['departurePoint']['commonName'].split(' ')[0]}": second_platform,
             "operator": second_leg_raw.get('operator', {}).get('id', 'N/A'),
@@ -335,3 +351,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
