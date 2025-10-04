@@ -197,8 +197,10 @@ def process_journey(journey, log_id):
     
     try:
         # First Leg Times
-        first_departure_time_str = first_leg_raw['departurePoint']['departureTime']
-        first_arrival_time_str = first_leg_raw['arrivalPoint']['arrivalTime']
+        # FIX: The departure and arrival times are direct properties of the leg object, 
+        # not nested under departurePoint/arrivalPoint.
+        first_departure_time_str = first_leg_raw['departureTime']
+        first_arrival_time_str = first_leg_raw['arrivalTime']
         
         first_departure_time_formatted = datetime.fromisoformat(first_departure_time_str).strftime('%H:%M')
         first_arrival_time_formatted = datetime.fromisoformat(first_arrival_time_str).strftime('%H:%M')
@@ -206,8 +208,9 @@ def process_journey(journey, log_id):
         transfer_time_minutes = 0
         if num_changes == 1:
             # Second Leg Times (required for transfer calculation)
-            second_departure_time_str = second_leg_raw['departurePoint']['departureTime']
-            second_arrival_time_str = second_leg_raw['arrivalPoint']['arrivalTime']
+            # FIX: Same correction for the second leg times.
+            second_departure_time_str = second_leg_raw['departureTime']
+            second_arrival_time_str = second_leg_raw['arrivalTime']
 
             second_departure_time_formatted = datetime.fromisoformat(second_departure_time_str).strftime('%H:%M')
             second_arrival_time_formatted = datetime.fromisoformat(second_arrival_time_str).strftime('%H:%M')
@@ -224,7 +227,7 @@ def process_journey(journey, log_id):
                 return None
                 
     except KeyError as e:
-        # Catches the 'departureTime' or 'arrivalPoint' missing error
+        # Catches the 'departureTime' or 'arrivalTime' missing error
          print(f"   Journey {log_id} skipped: Critical journey data missing ({e}). Skipping malformed journey.")
          return None
     except ValueError:
@@ -367,5 +370,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
