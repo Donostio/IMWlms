@@ -1,1 +1,62 @@
-[]
+[
+    {
+        "type": "Direct",
+        "departureTime": "06:51",
+        "arrivalTime": "07:01",
+        "totalDuration": "44 min",
+        "status": "On Time",
+        "live_updated_at": "22:46:30",
+        "legs": [
+            {
+                "origin": "Streatham Common Rail Station",
+                "destination": "Clapham Junction Rail Station",
+                "departure": "06:51",
+                "arrival": "07:01",
+                "departurePlatform_Streatham": "TBC",
+                "operator": "N/A",
+                "status": "On Time"
+            }
+        ],
+        "id": 1
+    },
+    {
+        "type": "Direct",
+        "departureTime": "07:37",
+        "arrivalTime": "07:47",
+        "totalDuration": "41 min",
+        "status": "On Time",
+        "live_updated_at": "22:46:31",
+        "legs": [
+            {
+                "origin": "Streatham Common Rail Station",
+                "destination": "Clapham Junction Rail Station",
+                "departure": "07:37",
+                "arrival": "07:47",
+                "departurePlatform_Streatham": "TBC",
+                "operator": "N/A",
+                "status": "On Time"
+            }
+        ],
+        "id": 2
+    },
+    {
+        "type": "Direct",
+        "departureTime": "08:01",
+        "arrivalTime": "08:06",
+        "totalDuration": "23 min",
+        "status": "On Time",
+        "live_updated_at": "22:46:32",
+        "legs": [
+            {
+                "origin": "Streatham Common Rail Station",
+                "destination": "Clapham Junction Rail Station",
+                "departure": "08:01",
+                "arrival": "08:06",
+                "departurePlatform_Streatham": "TBC",
+                "operator": "N/A",
+                "status": "On Time"
+            }
+        ],
+        "id": 3
+    }
+]
