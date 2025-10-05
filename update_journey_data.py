@@ -166,14 +166,10 @@ class TflRailDataHarvester:
         else:
             params['time'] = now_london.strftime('%H%M')
 
-        # --- Use full station names, URL encoded, for the API path ---
-        origin_name = STATIONS.get(origin_crs, origin_crs)
-        destination_name = STATIONS.get(destination_crs, destination_crs)
-        
-        encoded_origin = urllib.parse.quote(origin_name)
-        encoded_destination = urllib.parse.quote(destination_name)
-        
-        url = f"{TFL_BASE_URL}/Journey/JourneyResults/{encoded_origin}/to/{encoded_destination}"
+        # --- FIX: Reverting to CRS codes in the path, as the TfL API JourneyResults endpoint 
+        #           appears to require the short codes (e.g., 'SRC', 'IMW') in the URL path, 
+        #           despite our configuration using full names elsewhere.
+        url = f"{TFL_BASE_URL}/Journey/JourneyResults/{origin_crs}/to/{destination_crs}"
         # -----------------------------------------------------------------
         
         try:
