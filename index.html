@@ -79,12 +79,42 @@
             return (hours * 60) + minutes;
         }
 
+        /**
+         * Formats the departure time, highlighting delays if the scheduled time differs from the expected time.
+         * @param {object} leg - The first_leg data object.
+         * @param {boolean} isTitle - Adjusts font size for the card title display.
+         * @returns {string} HTML for the formatted time.
+         */
+        const formatDepartureTime = (leg, isTitle = false) => {
+            const scheduledTime = leg.scheduled_departure;
+            const expectedDeparture = leg.departure;
+
+            let expectedClass = isTitle ? 'font-extrabold' : 'font-bold';
+            let scheduledClass = isTitle ? 'text-sm' : 'text-xs';
+
+            if (scheduledTime && scheduledTime !== expectedDeparture) {
+                // Delayed: Display expected time (bold, red) followed by scheduled time (bracketed, grey)
+                return `
+                    <span class="text-red-600 ${expectedClass}">${expectedDeparture}</span>
+                    <span class="${scheduledClass} text-gray-500 font-normal ml-1">(${scheduledTime})</span>
+                `;
+            }
+            // On Time: Display expected time (bold/extrabold)
+            return `<span class="text-gray-800 ${expectedClass}">${expectedDeparture}</span>`;
+        };
+
+
         const renderJourneyCard = (segment) => {
             const firstLeg = segment.first_leg;
             
             // Extract the platform keys dynamically
             const firstPlatformKey = Object.keys(firstLeg).find(key => key.startsWith('departurePlatform'));
             const firstPlatform = firstLeg[firstPlatformKey] || 'TBC';
+
+            // Formatted departure time for the card title (larger font)
+            const titleDepartureHtml = formatDepartureTime(firstLeg, true);
+            // Formatted departure time for the body text (normal font)
+            const bodyDepartureHtml = formatDepartureTime(firstLeg, false);
 
             // Function to render the connections for the second leg
             const renderConnections = (connections) => {
@@ -95,7 +125,12 @@
                     const secondLeg = conn.second_leg;
                     
                     // Simple total duration calculation (Note: assumes same day, if crossings midnight occur, logic must be more complex)
-                    const totalMinutes = getTimeInMinutes(secondLeg.arrival) - getTimeInMinutes(firstLeg.departure);
+                    // If arrival is earlier than departure (e.g., 00:05 arrival, 23:55 departure), add 24 hours to arrival time for correct duration calculation.
+                    let totalMinutes = getTimeInMinutes(secondLeg.arrival) - getTimeInMinutes(firstLeg.departure);
+                    if (totalMinutes < 0) {
+                        totalMinutes += 1440; // Add 24 hours (1440 minutes)
+                    }
+
 
                     const operatorClass = getOperatorClass(secondLeg.operator);
                     const formattedOperator = formatOperatorName(secondLeg.operator);
@@ -136,7 +171,7 @@
             return `
                 <div class="card-bg p-6 rounded-xl mb-8 border-b-8 border-rail-blue transition duration-300 ease-in-out hover:shadow-2xl">
                     <h3 class="text-2xl font-extrabold text-rail-blue mb-4 border-b pb-2">
-                        Segment ${segment.segment_id}: <span class="text-gray-800">${firstLeg.departure} $\\rightarrow$ ${firstLeg.arrival}</span>
+                        Segment ${segment.segment_id}: ${titleDepartureHtml} $\\rightarrow$ ${firstLeg.arrival}
                     </h3>
                     
                     <!-- First Leg Summary -->
@@ -149,7 +184,7 @@
                             <span class="text-sm ${firstLeg.status === 'On Time' ? 'text-green-600' : 'text-yellow-600'}">${firstLeg.status}</span>
                         </div>
                         <p class="text-sm text-gray-600 mt-2">
-                            Departs Streatham Common at: <span class="font-bold">${firstLeg.departure}</span> (Platform: <span class="font-bold">${firstPlatform}</span>)
+                            Departs Streatham Common at: ${bodyDepartureHtml} (Platform: <span class="font-bold">${firstPlatform}</span>)
                         </p>
                         <p class="text-sm text-gray-600">
                             Arrives Clapham Junction at: <span class="font-bold">${firstLeg.arrival}</span>
@@ -222,4 +257,5 @@
     </script>
 </body>
 </html>
+
 
