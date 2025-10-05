@@ -1,340 +1,404 @@
-import json
 import os
-from datetime import datetime, timedelta
+import json
 import requests
-import pytz 
-import random 
-import urllib.parse # <-- New import for URL encoding
+import time
+from datetime import datetime, timedelta
 
 # --- Configuration ---
-LIVE_DATA_FILE = 'live_data.json'
-MAX_JOURNEYS_TO_SAVE = 5 
-MIN_TRANSFER_MINUTES = 3 
-TFL_BASE_URL = "https://api.tfl.gov.uk/v1"
+TFL_APP_ID = os.getenv("TFL_APP_ID", "")
+TFL_APP_KEY = os.getenv("TFL_APP_KEY", "")
+OUTPUT_FILE = "live_data.json"
 
-# National Rail CRS Codes used by TfL for these routes
-STATION_CODES = {
-    'FROM': 'SRC', # Streatham Common
-    'TO': 'IMW',  # Imperial Wharf
-    'VIA': 'CLJ'  # Clapham Junction (intermediate station)
-}
-STATIONS = {
-    'SRC': 'Streatham Common Rail Station',
-    'CLJ': 'Clapham Junction Rail Station',
-    'IMW': 'Imperial Wharf Rail Station'
-}
-PLATFORMS = {
-    'CLJ': ['1', '2', '3', '4', '5', '6'],
-}
-LONDON_TIMEZONE = pytz.timezone('Europe/London')
+# Journey parameters
+ORIGIN = "Streatham Common Rail Station"
+DESTINATION = "Imperial Wharf Rail Station"
+INTERCHANGE_STATION = "Clapham Junction Rail Station"
 
+# TFL API endpoint
+TFL_BASE_URL = "https://api.tfl.gov.uk"
+NUM_JOURNEYS = 8 # Target the next eight best segments (Direct or One Change)
+MIN_TRANSFER_TIME_MINUTES = 3 # Minimum acceptable transfer time
+MAX_RETRIES = 3 # Max retries for API calls
+
+# NOTE: Live platform lookups have been removed as the TFL StopPoint API frequently
+# returns 404 for these National Rail stations. Platform data will default to "TBC".
 
 # --- Utility Functions ---
 
-def parse_time_to_dt(time_str, date_dt):
-    """Parses HH:MM time string and combines it with a date datetime object."""
-    try:
-        time_obj = datetime.strptime(time_str, '%H:%M').time()
-        # Combine the date part with the time part
-        dt_full = date_dt.replace(hour=time_obj.hour, minute=time_obj.minute, second=0, microsecond=0)
-        return dt_full
-    except ValueError:
-        return None
-
-def format_time(dt_string):
-    """Formats an ISO datetime string (from TFL) to HH:MM."""
-    try:
-        # TFL often returns ZULU time (ends in Z) or no timezone info
-        dt = datetime.fromisoformat(dt_string.replace('Z', '+00:00'))
-        # Ensure conversion to London Time before formatting
-        dt_london = dt.astimezone(LONDON_TIMEZONE)
-        return dt_london.strftime('%H:%M')
-    except Exception:
-        # If standard parsing fails, assume it's already HH:MM or return as is
-        return dt_string 
-
-def calculate_duration_str(duration_mins):
-    """Formats duration in minutes to string."""
-    return f"{duration_mins} min"
-
-def get_status_from_leg(leg):
-    """Determines simplified status (On Time, Delayed, Cancelled) from a TfL leg."""
-    if leg.get('isCancelled'):
-        return 'Cancelled'
-    
-    scheduled_departure = leg.get('scheduledDepartureTime')
-    departure = leg.get('departureTime')
-    
-    if scheduled_departure and departure and departure and scheduled_departure != departure:
-        # Simple detection of a delay
-        return 'Delayed'
-    
-    return 'On Time'
-
-def get_platform_info(leg, origin_code):
-    """Extracts platform and formats the key correctly."""
-    platform = leg.get('departurePoint', {}).get('platformName') or leg.get('departurePoint', {}).get('platform') or 'TBC'
-    return platform
-
-def map_leg_to_json(leg, origin_code, dest_code):
-    """Maps a single TfL leg object to the required internal format."""
-    
-    platform = get_platform_info(leg, origin_code)
-    
-    return {
-        "origin": leg.get('departurePoint', {}).get('commonName') or STATIONS.get(origin_code, origin_code),
-        "destination": leg.get('arrivalPoint', {}).get('commonName') or STATIONS.get(dest_code, dest_code),
-        "departure": format_time(leg.get('departureTime')),
-        "scheduled_departure": format_time(leg.get('scheduledDepartureTime') or leg.get('departureTime')),
-        "arrival": format_time(leg.get('arrivalTime')),
-        # Use dynamic platform keying for clarity on the UI side
-        f"departurePlatform_{origin_code}": platform,
-        "operator": leg.get('instruction', {}).get('summary', 'Unknown Operator'),
-        "status": get_status_from_leg(leg)
-    }
-
-# --- TFL Data Harvester ---
-
-class TflRailDataHarvester:
-    """
-    Fetches real-time journey data from the TfL Unified API using the two-separate-query 
-    approach to ensure all short-transfer options are captured and built manually.
-    """
-    def __init__(self):
-        self.app_id = os.environ.get('TFL_APP_ID')
-        self.app_key = os.environ.get('TFL_APP_KEY')
-        self.journeys = []
-        self.segment_id_counter = 1
-        self.london_now = datetime.now(LONDON_TIMEZONE)
-        
-        if not self.app_id or not self.app_key:
-            print("ERROR: TFL_APP_ID or TFL_APP_KEY environment variables are missing.")
-            self._use_mock_fallback = True
-            print("WARNING: Falling back to mock data generation.")
-        else:
-            self._use_mock_fallback = False
-
-    def fetch_tfl_journeys(self, origin_crs, destination_crs, max_journeys=8, departure_time=None):
-        """
-        Fetches journey results between two CRS codes, optionally setting a 
-        specific departure time for the second leg search. Uses full station names in the URL.
-        """
-        if self._use_mock_fallback:
-            # Mock fallback logic remains here, unchanged for brevity
-            from datetime import timedelta
-            now = datetime.now(LONDON_TIMEZONE)
-            # ... mock setup
-            direct_journey = {
-                'startDateTime': now.isoformat(), 
-                'duration': 35, 
-                'legs': [
-                    {'duration': 35, 'departureTime': (now + timedelta(minutes=10)).isoformat(), 'scheduledDepartureTime': (now + timedelta(minutes=10)).isoformat(), 'arrivalTime': (now + timedelta(minutes=45)).isoformat(), 'arrivalPoint': {'crsCode': STATION_CODES['TO'], 'commonName': STATIONS['IMW']}, 'departurePoint': {'crsCode': STATION_CODES['FROM'], 'commonName': STATIONS['SRC']}, 'instruction': {'summary': 'Southern Service'}, 'isCancelled': False}
-                ]
-            }
-            first_leg_journey = {
-                'startDateTime': (now + timedelta(minutes=20)).isoformat(), 
-                'duration': 12, 
-                'legs': [
-                    {'duration': 12, 'departureTime': (now + timedelta(minutes=20)).isoformat(), 'scheduledDepartureTime': (now + timedelta(minutes=20)).isoformat(), 'arrivalTime': (now + timedelta(minutes=32)).isoformat(), 'arrivalPoint': {'crsCode': STATION_CODES['VIA'], 'commonName': STATIONS['CLJ']}, 'departurePoint': {'crsCode': STATION_CODES['FROM'], 'commonName': STATIONS['SRC']}, 'instruction': {'summary': 'London Overground'}, 'isCancelled': False},
-                ]
-            }
-            second_leg_journey = {
-                'startDateTime': (now + timedelta(minutes=35)).isoformat(), 
-                'duration': 5, 
-                'legs': [
-                    {'duration': 5, 'departureTime': (now + timedelta(minutes=35)).isoformat(), 'scheduledDepartureTime': (now + timedelta(minutes=35)).isoformat(), 'arrivalTime': (now + timedelta(minutes=40)).isoformat(), 'arrivalPoint': {'crsCode': STATION_CODES['TO'], 'commonName': STATIONS['IMW']}, 'departurePoint': {'crsCode': STATION_CODES['VIA'], 'commonName': STATIONS['CLJ']}, 'instruction': {'summary': 'London Overground'}, 'isCancelled': False},
-                ]
-            }
-
-            return {'journeys': [direct_journey, first_leg_journey, second_leg_journey]}
-
-        now_london = self.london_now
-        
-        # Base parameters
-        params = {
-            'app_id': self.app_id,
-            'app_key': self.app_key,
-            'date': now_london.strftime('%Y%m%d'),
-            'timeIs': 'departing', 
-            'journeyPreference': 'LeastInterchange',
-            'maxJourneys': max_journeys 
-        }
-
-        # Override departure time if provided (used for CLJ -> IMW search)
-        if departure_time:
-            params['time'] = departure_time
-        else:
-            params['time'] = now_london.strftime('%H%M')
-
-        # --- FIX: Reverting to CRS codes in the path, as the TfL API JourneyResults endpoint 
-        #           appears to require the short codes (e.g., 'SRC', 'IMW') in the URL path, 
-        #           despite our configuration using full names elsewhere.
-        url = f"{TFL_BASE_URL}/Journey/JourneyResults/{origin_crs}/to/{destination_crs}"
-        # -----------------------------------------------------------------
-        
+def retry_fetch(url, params, max_retries=MAX_RETRIES):
+    """Fetches data from a URL with exponential backoff for resilience."""
+    for attempt in range(max_retries):
         try:
             response = requests.get(url, params=params, timeout=10)
-            response.raise_for_status() 
-            
-            data = response.json()
-            return data
-            
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.HTTPError as e:
+            print(f"ERROR fetching data ({e}): Attempt {attempt + 1}/{max_retries}. Retrying in {2**attempt}s...")
+            if attempt < max_retries - 1:
+                time.sleep(2**attempt)
+            else:
+                raise
         except requests.exceptions.RequestException as e:
-            print(f"ERROR: Failed to fetch data from TfL API ({origin_crs} to {destination_crs}): {e}")
-            return None
+            print(f"ERROR connecting to API ({e}): Attempt {attempt + 1}/{max_retries}. Retrying in {2**attempt}s...")
+            if attempt < max_retries - 1:
+                time.sleep(2**attempt)
+            else:
+                raise
 
-    def run_two_leg_search(self):
-        """
-        Executes the two separate real-time API queries and stitches the results 
-        to build the full journey list.
-        """
-        
-        # 1. Fetch direct SRC -> IMW journeys
-        direct_data = self.fetch_tfl_journeys(STATION_CODES['FROM'], STATION_CODES['TO'], max_journeys=3)
-        if direct_data and direct_data.get('journeys'):
-            for raw_journey in direct_data['journeys']:
-                legs = raw_journey.get('legs', [])
-                if len(legs) == 1 and legs[0].get('arrivalPoint', {}).get('crsCode') == STATION_CODES['TO']:
-                    first_leg = map_leg_to_json(legs[0], STATION_CODES['FROM'], STATION_CODES['TO'])
-                    
-                    self.journeys.append({
-                        "type": "Direct",
-                        "first_leg": first_leg,
-                        "connections": [],
-                        "totalDuration": calculate_duration_str(raw_journey.get('duration')),
-                        "arrivalTime": first_leg['arrival'],
-                        "departureTime": first_leg['departure'],
-                        "segment_id": self.segment_id_counter,
-                        "live_updated_at": self.london_now.strftime('%H:%M:%S')
-                    })
-                    self.segment_id_counter += 1
-                    if len(self.journeys) >= MAX_JOURNEYS_TO_SAVE:
-                        return 
-
-        # 2. Fetch all potential first legs: SRC -> CLJ
-        first_leg_data = self.fetch_tfl_journeys(STATION_CODES['FROM'], STATION_CODES['VIA'], max_journeys=10)
-        
-        if not first_leg_data or not first_leg_data.get('journeys'):
-            return 
-
-        # 3. Fetch all potential second legs: CLJ -> IMW (Departure board style)
-        second_leg_data = self.fetch_tfl_journeys(STATION_CODES['VIA'], STATION_CODES['TO'], max_journeys=15)
-        
-        if not second_leg_data or not second_leg_data.get('journeys'):
-            return 
-            
-        # Extract and format second leg options for easy lookup/stitching
-        second_legs = []
-        for raw_journey in second_leg_data['journeys']:
-            legs = raw_journey.get('legs', [])
-            if len(legs) >= 1 and legs[0].get('departurePoint', {}).get('crsCode') == STATION_CODES['VIA'] and legs[0].get('arrivalPoint', {}).get('crsCode') == STATION_CODES['TO']:
-                second_legs.append(map_leg_to_json(legs[0], STATION_CODES['VIA'], STATION_CODES['TO']))
-
-
-        # 4. Stitching Logic: Iterate over first legs and find valid second legs
-        processed_first_legs = set()
-        
-        for raw_first_leg_journey in first_leg_data['journeys']:
-            
-            # Check for max journey limit
-            if len(self.journeys) >= MAX_JOURNEYS_TO_SAVE:
-                break
-                
-            legs = raw_first_leg_journey.get('legs', [])
-            if not legs: continue
-            
-            first_raw_leg = legs[0]
-            first_leg = map_leg_to_json(first_raw_leg, STATION_CODES['FROM'], STATION_CODES['VIA'])
-            
-            dep_time_key = first_leg['departure']
-            if dep_time_key in processed_first_legs:
-                continue 
-            processed_first_legs.add(dep_time_key)
-
-            # Get the arrival time at CLJ as a datetime object
-            clj_arrival_time_str = first_leg['arrival']
-            clj_arrival_dt = parse_time_to_dt(clj_arrival_time_str, self.london_now)
-            if not clj_arrival_dt: continue
-
-            valid_connections = []
-            
-            # Find the next 3 valid connections from CLJ
-            for second_leg in second_legs:
-                
-                # Get the departure time from CLJ as a datetime object
-                clj_departure_time_str = second_leg['departure']
-                clj_departure_dt = parse_time_to_dt(clj_departure_time_str, self.london_now)
-
-                if not clj_departure_dt: continue
-
-                # Adjust for midnight crossing 
-                if clj_departure_dt < clj_arrival_dt:
-                    clj_departure_dt += timedelta(days=1)
-                
-                transfer_duration = (clj_departure_dt - clj_arrival_dt).total_seconds() / 60
-                
-                # Check minimum transfer time
-                if transfer_duration >= MIN_TRANSFER_MINUTES:
-                    # Found a valid connection
-                    valid_connections.append({
-                        "transferTime": f"{int(transfer_duration)} min",
-                        "second_leg": second_leg
-                    })
-                
-                # Stop looking for connections once we have the required number
-                if len(valid_connections) >= 3:
-                    break
-            
-            # Only add the combined journey if at least one valid connection was found
-            if valid_connections:
-                
-                # Calculate total duration based on the earliest valid connection
-                earliest_connection = valid_connections[0]
-                final_arrival_time_str = earliest_connection['second_leg']['arrival']
-                
-                dep_dt_full = parse_time_to_dt(first_leg['departure'], self.london_now)
-                arr_dt_full = parse_time_to_dt(final_arrival_time_str, self.london_now)
-                
-                # Adjust total arrival for midnight crossing
-                if arr_dt_full < dep_dt_full:
-                    arr_dt_full += timedelta(days=1)
-                
-                total_duration = int((arr_dt_full - dep_dt_full).total_seconds() / 60)
-                total_duration_str = calculate_duration_str(total_duration)
-                
-                journey = {
-                    "type": "One Change",
-                    "first_leg": first_leg,
-                    "connections": valid_connections,
-                    "totalDuration": total_duration_str,
-                    "arrivalTime": final_arrival_time_str,
-                    "departureTime": first_leg['departure'],
-                    "segment_id": self.segment_id_counter,
-                    "live_updated_at": self.london_now.strftime('%H:%M:%S')
-                }
-                self.journeys.append(journey)
-                self.segment_id_counter += 1
-
-
-def save_rail_data():
-    """Initializes the TFL data harvester and saves it to JSON."""
-    harvester = TflRailDataHarvester()
+def get_segment_journeys(origin, destination, departure_time=None):
+    """
+    Fetch a list of planned journeys for a single segment using the TFL Journey Planner.
+    This is used to get all viable train legs for stitching or direct routes.
+    The optional departure_time forces the TFL API to search from a specific point.
+    """
+    url = f"{TFL_BASE_URL}/Journey/JourneyResults/{origin}/to/{destination}"
     
-    # Run the new two-step search logic using only real API calls
-    harvester.run_two_leg_search()
+    params = {
+        "mode": "overground,national-rail",
+        "timeIs": "Departing",
+        "journeyPreference": "LeastTime",
+        "alternativeRoute": "true"
+    }
     
-    data_to_save = harvester.journeys[:MAX_JOURNEYS_TO_SAVE]
-
+    # If a specific departure time is provided, use it in the API call
+    if departure_time:
+        # TFL API expects time in HHMM format and date in YYYYMMDD
+        params["time"] = departure_time.strftime('%H%M')
+        params["date"] = departure_time.strftime('%Y%m%d')
+        print(f"DEBUG: Forcing API search for segment from {origin} to start at {departure_time.strftime('%H:%M')}.")
+    
+    if TFL_APP_ID and TFL_APP_KEY:
+        params["app_id"] = TFL_APP_ID
+        params["app_key"] = TFL_APP_KEY
+    
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] Fetching segment journeys from {origin} to {destination}...")
     try:
-        with open(LIVE_DATA_FILE, 'w') as f:
-            json.dump(data_to_save, f, indent=4)
-        print(f"✓ Successfully generated and saved {len(data_to_save)} journey segments to {LIVE_DATA_FILE}")
+        json_data = retry_fetch(url, params)
+        return json_data.get('journeys', []) if json_data else []
     except Exception as e:
-        print(f"Error saving data to JSON: {e}")
+        print(f"ERROR: Failed to get segment journeys for {origin} to {destination}: {e}")
+        return []
 
-if __name__ == '__main__':
-    try:
-        import pytz 
-        save_rail_data()
-    except (ImportError, NameError) as e:
-        print(f"FATAL ERROR: Failed to run live data script. Missing library: {e}. Please ensure 'requests' and 'pytz' are installed by running 'pip install -r requirements.txt'")
+def extract_valid_train_legs(journeys, expected_destination):
+    """
+    Extracts the primary train leg from each journey result that matches the expected
+    destination and returns a list of cleaned-up leg objects.
+    It filters for unique train services based on time and line ID.
+    """
+    valid_legs = []
+    
+    for journey in journeys:
+        # A journey result can contain multiple legs (e.g., walk + train), we only care about the first train leg.
+        for leg in journey.get('legs', []):
+            if leg.get('mode', {}).get('id') in ['overground', 'national-rail']:
+                # Basic validation: ensure the arrival point is the expected destination
+                if leg.get('arrivalPoint', {}).get('commonName') == expected_destination:
+                    valid_legs.append(leg)
+                break # Move to the next journey once the first train leg is found
+                
+    # Use a set comprehension to filter out duplicate legs (multiple journeys might return the same train)
+    unique_legs = {
+        (leg['departureTime'], leg['arrivalTime'], leg.get('line', {}).get('id')): leg 
+        for leg in valid_legs
+    }.values()
+    
+    return list(unique_legs)
+
+def group_connections_by_first_leg(first_legs, second_legs):
+    """
+    Groups valid second legs (connections) under their corresponding first leg (L1).
+    """
+    
+    grouped_segments = {}
+    
+    # Sort first legs by departure time for chronological display
+    sorted_first_legs = sorted(first_legs, key=lambda l: datetime.fromisoformat(l['departureTime']))
+
+    # --- DEBUGGING: Display available legs for clarity ---
+    l1_departures = [datetime.fromisoformat(l['departureTime']).strftime('%H:%M') for l in sorted_first_legs]
+    l2_departures = [datetime.fromisoformat(l['departureTime']).strftime('%H:%M') for l in second_legs]
+    print(f"DEBUG: L1 (Streatham Common → Clapham Junction) Departures: {', '.join(l1_departures)}")
+    print(f"DEBUG: L2 (Clapham Junction → Imperial Wharf) Departures: {', '.join(l2_departures)}")
+    # --- END DEBUGGING ---
+
+    for leg1 in sorted_first_legs:
+        # Use a unique key for the first leg
+        leg1_key = (leg1['departureTime'], leg1['arrivalTime'])
+        
+        # --- Prepare First Leg Data Structure ---
+        if leg1_key not in grouped_segments:
+            
+            # PLATFORM EXTRACTION LOGIC:
+            first_platform = leg1.get('platform', 'TBC')
+
+            dep_time_l1 = datetime.fromisoformat(leg1['departureTime'])
+            arr_time_l1 = datetime.fromisoformat(leg1['arrivalTime'])
+            
+            # Extract scheduled time
+            scheduled_dep = leg1.get('scheduledDepartureTime')
+            scheduled_dep_str = datetime.fromisoformat(scheduled_dep).strftime('%H:%M') if scheduled_dep else dep_time_l1.strftime('%H:%M')
+            
+            operator_id = leg1.get('operator', {}).get('id', 'N/A')
+
+            first_leg_data = {
+                "origin": leg1['departurePoint']['commonName'],
+                "destination": leg1['arrivalPoint']['commonName'],
+                "departure": dep_time_l1.strftime('%H:%M'),
+                "scheduled_departure": scheduled_dep_str, # NEW FIELD for displaying delay
+                "arrival": arr_time_l1.strftime('%H:%M'),
+                f"departurePlatform_{leg1['departurePoint']['commonName'].split(' ')[0]}": first_platform,
+                "operator": operator_id,
+                "status": leg1.get('status', 'On Time'),
+                "rawArrivalTime": leg1['arrivalTime']
+            }
+
+            grouped_segments[leg1_key] = {
+                "type": "One Change", # Label the journey type
+                "first_leg": first_leg_data,
+                "connections": []
+            }
+        
+        # --- Find and Process Valid Connections (Second Legs) ---
+        for leg2 in second_legs:
+            arr_time_l1 = datetime.fromisoformat(leg1['arrivalTime'])
+            dep_time_l2 = datetime.fromisoformat(leg2['departureTime'])
+            
+            time_difference = dep_time_l2 - arr_time_l1
+            transfer_time_minutes = int(time_difference.total_seconds() / 60)
+            
+            if transfer_time_minutes >= MIN_TRANSFER_TIME_MINUTES:
+                
+                # PLATFORM EXTRACTION LOGIC:
+                second_platform = leg2.get('platform', 'TBC')
+
+                dep_time_l2 = datetime.fromisoformat(leg2['departureTime'])
+                arr_time_l2 = datetime.fromisoformat(leg2['arrivalTime'])
+                
+                second_leg_data = {
+                    "origin": leg2['departurePoint']['commonName'],
+                    "destination": leg2['arrivalPoint']['commonName'],
+                    "departure": dep_time_l2.strftime('%H:%M'),
+                    "arrival": arr_time_l2.strftime('%H:%M'),
+                    f"departurePlatform_{leg2['departurePoint']['commonName'].split(' ')[0]}": second_platform,
+                    "operator": leg2.get('operator', {}).get('id', 'N/A'),
+                    "status": leg2.get('status', 'On Time'),
+                    "rawDepartureTime": leg2['departureTime'] # Keep raw time for connection sorting
+                }
+
+                # Add the connection
+                grouped_segments[leg1_key]['connections'].append({
+                    "transferTime": f"{transfer_time_minutes} min",
+                    "second_leg": second_leg_data
+                })
+
+    # Final Processing and Formatting (for stitched legs)
+    final_output = []
+    
+    # Filter segments to only include those with at least one connection
+    segments_with_connections = [s for s in grouped_segments.values() if s['connections']]
+    
+    # Sort connections for each first leg by the departure time of the second leg
+    for segment in segments_with_connections:
+        segment['connections'].sort(key=lambda x: datetime.strptime(x['second_leg']['departure'], '%H:%M'))
+        
+        # Calculate total duration for the stitched journey (approximate)
+        l1_dep = datetime.strptime(segment['first_leg']['departure'], '%H:%M')
+        l2_arr = datetime.strptime(segment['connections'][0]['second_leg']['arrival'], '%H:%M')
+        
+        # Handle time crossing midnight for duration calculation
+        if l2_arr < l1_dep:
+            l2_arr += timedelta(days=1)
+        
+        total_duration = l2_arr - l1_dep
+        segment['totalDuration'] = f"{int(total_duration.total_seconds() / 60)} min"
+        segment['arrivalTime'] = segment['connections'][0]['second_leg']['arrival']
+        segment['departureTime'] = segment['first_leg']['departure']
+        
+        # Remove raw times from final output
+        segment['first_leg'].pop('rawArrivalTime')
+        
+        # Create the unique identifier for the segment (used in main for final sorting/filtering)
+        segment['unique_id'] = (segment['first_leg']['departure'], segment['first_leg']['operator'])
+
+        for conn in segment['connections']:
+            conn['second_leg'].pop('rawDepartureTime')
+            
+        final_output.append(segment)
+        
+        # Log the result for the console output
+        conn_times = [c['second_leg']['departure'] for c in segment['connections']]
+        print(f"✓ Stitched Segment ({segment['first_leg']['departure']} → {segment['first_leg']['arrival']}): Found {len(conn_times)} connections ({', '.join(conn_times)})")
+
+
+    return final_output
+
+def process_direct_journey(journey, leg):
+    """Processes a single leg (direct journey) into the final segment format."""
+    
+    # PLATFORM EXTRACTION LOGIC:
+    first_platform = leg.get('platform', 'TBC')
+
+    dep_time = datetime.fromisoformat(leg['departureTime'])
+    arr_time = datetime.fromisoformat(leg['arrivalTime'])
+    
+    # Extract scheduled time
+    scheduled_dep = leg.get('scheduledDepartureTime')
+    scheduled_dep_str = datetime.fromisoformat(scheduled_dep).strftime('%H:%M') if scheduled_dep else dep_time.strftime('%H:%M')
+    
+    # Calculate total duration from TFL journey object
+    total_duration = journey.get('duration', 'N/A')
+    
+    operator_id = leg.get('operator', {}).get('id', 'N/A')
+    # Unique identifier for the direct train
+    unique_id = (dep_time.strftime('%H:%M'), operator_id)
+
+    return {
+        "type": "Direct", 
+        "departureTime": dep_time.strftime('%H:%M'),
+        "arrivalTime": arr_time.strftime('%H:%M'),
+        "totalDuration": f"{total_duration} min" if isinstance(total_duration, int) else total_duration,
+        "status": leg.get('status', 'On Time'),
+        "unique_id": unique_id, # Add unique identifier for cross-referencing
+        # Note: segment_id and live_updated_at are added in main()
+        "first_leg": {
+            "origin": leg['departurePoint']['commonName'],
+            "destination": leg['arrivalPoint']['commonName'],
+            "departure": dep_time.strftime('%H:%M'),
+            "scheduled_departure": scheduled_dep_str,
+            "arrival": arr_time.strftime('%H:%M'),
+            f"departurePlatform_{leg['departurePoint']['commonName'].split(' ')[0]}": first_platform,
+            "operator": operator_id,
+            "status": leg.get('status', 'On Time'),
+        },
+        "connections": [] # Direct trains have no connections
+    }
+
+
+def get_direct_journeys():
+    """Fetches and processes direct journeys from ORIGIN to DESTINATION."""
+    print(f"\n[{datetime.now().strftime('%H:%M:%S')}] Fetching direct journeys from {ORIGIN} to {DESTINATION}...")
+    
+    # Get all journeys from Streatham Common to Imperial Wharf
+    journeys = get_segment_journeys(ORIGIN, DESTINATION)
+    direct_journeys = []
+
+    for journey in journeys:
+        # Check for direct train: Journey has exactly one leg, and that leg is a train.
+        if len(journey.get('legs', [])) == 1:
+            leg = journey['legs'][0]
+            if leg.get('mode', {}).get('id') in ['overground', 'national-rail']:
+                
+                # Check that the leg destination is the final destination (Imperial Wharf)
+                if leg.get('arrivalPoint', {}).get('commonName') == DESTINATION:
+                    
+                    # Process and format the direct journey
+                    processed_journey = process_direct_journey(journey, leg)
+                    direct_journeys.append(processed_journey)
+                    
+                    print(f"✓ Found direct journey: {processed_journey['departureTime']} → {processed_journey['arrivalTime']}")
+                    
+    return direct_journeys
+
+
+def get_one_change_journeys(direct_journeys):
+    """
+    Fetches all train legs for the two segments, manually groups them, and filters
+    out any first legs that correspond to a direct journey.
+    """
+    
+    # 1. Fetch all unique train legs from Streatham Common to Clapham Junction (searches from now)
+    journeys_l1 = get_segment_journeys(ORIGIN, INTERCHANGE_STATION)
+    first_legs = extract_valid_train_legs(journeys_l1, INTERCHANGE_STATION)
+    print(f"DEBUG: Found {len(first_legs)} unique legs for the first segment.")
+    
+    if not first_legs:
+        print("ERROR: Could not retrieve any first train legs.")
+        return []
+
+    # --- NEW FILTERING LOGIC ---
+    # Create a set of unique identifiers (departure time, operator ID) for all found direct trains.
+    # This identifies the services that MUST NOT be used as Leg 1 in a stitched journey.
+    direct_train_ids = {
+        j['unique_id'] 
+        for j in direct_journeys
+    }
+    
+    # Filter out any Leg 1 that matches a direct train service
+    filtered_first_legs = []
+    
+    for leg in first_legs:
+        # TFL returns the full train journey's operator even when segmenting a leg
+        leg_id = (datetime.fromisoformat(leg['departureTime']).strftime('%H:%M'), leg.get('operator', {}).get('id'))
+        
+        if leg_id in direct_train_ids:
+            print(f"DEBUG: Filtering Leg 1 {leg_id[0]} as it is a known direct service.")
+            continue
+            
+        filtered_first_legs.append(leg)
+
+    first_legs = filtered_first_legs
+    print(f"DEBUG: Filtered down to {len(first_legs)} unique Leg 1s (non-direct).")
+    # --- END NEW FILTERING LOGIC ---
+    
+    # 2. Fetch all unique train legs from Clapham Junction to Imperial Wharf
+    # Look 90 minutes into the future to ensure we capture a good range of connecting trains.
+    future_time = datetime.now() + timedelta(minutes=90)
+    journeys_l2 = get_segment_journeys(INTERCHANGE_STATION, DESTINATION, departure_time=future_time)
+    second_legs = extract_valid_train_legs(journeys_l2, DESTINATION)
+    print(f"DEBUG: Found {len(second_legs)} unique legs for the second segment.")
+    
+    if not second_legs:
+        print("ERROR: Could not retrieve sufficient train legs for stitching.")
+        return []
+
+    # 3. Group and process the connections
+    processed_segments = group_connections_by_first_leg(first_legs, second_legs)
+
+    if not processed_segments:
+        print(f"No valid segments found with connections meeting the minimum {MIN_TRANSFER_TIME_MINUTES}-minute transfer.")
+        return []
+
+    return processed_segments
+
+def main():
+    # 1. Get Direct Journeys
+    direct_data = get_direct_journeys()
+    
+    # 2. Get One-Change Journeys (Stitched), filtering out the direct trains
+    # The get_one_change_journeys function now handles filtering based on direct_data
+    stitched_data = get_one_change_journeys(direct_data) 
+    
+    # 3. Combine and Sort all results
+    combined_data = direct_data + stitched_data
+    
+    # Sort the list by the departure time of the first leg (or direct journey)
+    sorted_data = sorted(combined_data, key=lambda x: datetime.strptime(x['first_leg']['departure'], '%H:%M'))
+    
+    # 4. Add IDs, Timestamps, and slice the final list
+    final_output = []
+    current_time = datetime.now().strftime('%H:%M:%S')
+
+    for idx, segment in enumerate(sorted_data):
+        # Assign unified metadata
+        segment['segment_id'] = idx + 1
+        segment['live_updated_at'] = current_time
+        
+        # Remove the temporary unique_id field before final output
+        if 'unique_id' in segment:
+            segment.pop('unique_id')
+        
+        final_output.append(segment)
+
+    # Limit to NUM_JOURNEYS segments (the best N options overall)
+    final_output = final_output[:NUM_JOURNEYS]
+    
+    if final_output:
+        with open(OUTPUT_FILE, 'w') as f:
+            json.dump(final_output, f, indent=4)
+        print(f"\n✓ Successfully saved {len(final_output)} journey segments (Direct and One Change) to {OUTPUT_FILE}")
+    else:
+        print(f"\n⚠ Failed to retrieve or process any valid journey data. {OUTPUT_FILE} remains unchanged.")
+
+
+if __name__ == "__main__":
+    main()
