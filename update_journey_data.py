@@ -17,7 +17,7 @@ INTERCHANGE_STATION = "Clapham Junction Rail Station"
 # TFL API endpoint
 TFL_BASE_URL = "https://api.tfl.gov.uk"
 NUM_JOURNEYS = 8 # Target the next eight best segments (Direct or One Change)
-MIN_TRANSFER_TIME_MINUTES = 3 # Minimum acceptable transfer time
+MIN_TRANSFER_TIME_MINUTES = 1 # Minimum acceptable transfer time
 MAX_RETRIES = 3 # Max retries for API calls
 
 # NOTE: Live platform lookups have been removed as the TFL StopPoint API frequently
