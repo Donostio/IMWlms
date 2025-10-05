@@ -149,6 +149,9 @@ def group_connections_by_first_leg(first_legs, second_legs, num_segments):
             time_difference = dep_time_l2 - arr_time_l1
             transfer_time_minutes = int(time_difference.total_seconds() / 60)
             
+            # DEBUG: Log the transfer time for every combination
+            print(f"DEBUG: L1 Arr {leg1['arrivalTime'][11:16]} ({leg1_key[0][11:16]}) vs L2 Dep {leg2['departureTime'][11:16]}. Transfer: {transfer_time_minutes} min. Required: {MIN_TRANSFER_TIME_MINUTES} min.")
+            
             if transfer_time_minutes >= MIN_TRANSFER_TIME_MINUTES:
                 
                 # Live platform data is disabled, default to TBC
@@ -251,6 +254,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
