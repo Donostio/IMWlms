@@ -257,7 +257,8 @@ def group_connections_by_first_leg(first_legs, second_legs, num_segments):
         print(f"✓ Segment {idx + 1} ({segment['first_leg']['departure']} → {segment['first_leg']['arrival']}): Found {len(conn_times)} connections ({', '.join(conn_times)})")
 
     # Limit to NUM_JOURNEYS segments
-    return final_output[:num_journeys]
+    # FIX APPLIED: Changed 'num_journeys' to 'num_segments'
+    return final_output[:num_segments]
 
 
 def stitch_and_process_journeys(num_segments):
@@ -301,5 +302,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
