@@ -26,6 +26,8 @@ jobs:
       - name: Run TFL data update script
         run: python update_journey_data.py
         env:
+          # Set Time Zone to Europe/London (BST/GMT) to correct the 1-hour offset for datetime.now()
+          TZ: Europe/London 
           # TFL API credentials (optional but recommended for higher rate limits)
           TFL_APP_ID: ${{ secrets.TFL_APP_ID }}
           TFL_APP_KEY: ${{ secrets.TFL_APP_KEY }}
