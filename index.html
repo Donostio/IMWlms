@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Next Four Rail Journeys</title>
+    <title>Next Three Rail Journeys</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -51,7 +51,7 @@
         
         <!-- Header (Only includes a friendly message for context) -->
         <header class="text-center pb-4 border-b border-gray-800">
-            <h1 class="4xl font-extrabold text-white">Live Rail Journey Segments</h1>
+            <h1 class="4xl font-extrabold text-white">Next Three Rail Journeys</h1>
         </header>
 
         <!-- Journey List -->
@@ -89,6 +89,19 @@
             const diffMins = Math.round(diffMs / 60000); // convert milliseconds to minutes
             return diffMins;
         };
+        
+        // --- Helper function to determine operator display text ---
+        const getOperatorDisplay = (rawOperator) => {
+            if (!rawOperator) return 'Operator TBC';
+            
+            // Normalize and check for "N/A" or empty string
+            const operator = String(rawOperator).trim().toUpperCase();
+            if (operator === '' || operator === 'N/A' || operator === 'UNDEFINED') {
+                return 'Operator TBC';
+            }
+
+            return rawOperator;
+        };
 
         // --- Helper Function to render connection details within a main card ---
         const renderConnectionDetails = (conn, journey) => {
@@ -99,9 +112,10 @@
             const claphamPlatformKey = Object.keys(secondLeg).find(key => key.startsWith('departurePlatform_Clapham'));
             const claphamPlatform = secondLeg[claphamPlatformKey] || 'TBC';
             
-            // Second Leg Operator Color
+            // Second Leg Operator Color and Display Name
             const secondLegOperator = secondLeg.operator;
-            const operatorDisplay = secondLegOperator || 'Operator TBC'; // Use TBC if data is missing
+            const operatorDisplay = getOperatorDisplay(secondLegOperator);
+            
             let operatorColor = 'text-gray-400';
             if (secondLegOperator && secondLegOperator.toLowerCase().includes('southern')) {
                 operatorColor = 'text-southern-green';
@@ -146,9 +160,10 @@
 
             const isDirect = journey.type === 'Direct';
             
-            // First Leg Operator Color
+            // First Leg Operator Color and Display Name
             const firstLegOperator = firstLeg.operator;
-            const operatorDisplay = firstLegOperator || 'Operator TBC'; // Use TBC if data is missing
+            const operatorDisplay = getOperatorDisplay(firstLegOperator);
+            
             let operatorColor = 'text-gray-400';
             if (firstLegOperator && firstLegOperator.toLowerCase().includes('southern')) {
                 operatorColor = 'text-southern-green';
@@ -255,9 +270,11 @@
                 
                 const data = await response.json();
                 
+                // --- LIMIT THE MAIN DISPLAY TO THE NEXT 3 JOURNEYS ---
+                const journeysToDisplay = data.slice(0, 3);
+                
                 // Hide loading and render results
-                // The map/join handles the new structure where renderJourneyCard may return multiple HTML blocks
-                const renderedHtml = data.map(renderJourneyCard).join('');
+                const renderedHtml = journeysToDisplay.map(renderJourneyCard).join('');
                 journeyListElement.innerHTML = renderedHtml || `
                     <div class="text-center p-8 text-gray-400">No journeys found in live_data.json.</div>
                 `;
