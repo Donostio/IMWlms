@@ -21,10 +21,13 @@ MIN_TRANSFER_TIME_MINUTES = 3 # Minimum acceptable transfer time
 MAX_RETRIES = 3 # Max retries for API calls
 
 # Defined Naptan IDs for stops mentioned in the route (Used for live platform lookups)
+# NOTE: The standard 910G Naptans were causing 404 errors on the live arrivals StopPoint API.
+# We are switching to the 940GZ<CRS> format, which is often more reliable for National Rail/Overground
+# live data lookups on the TFL API.
 NAPTAN_IDS = {
-    "Streatham Common Rail Station": "910GSTRHMCM",
-    "Clapham Junction Rail Station": "910GCLPHMJN",
-    "Imperial Wharf Rail Station": "910GIMPERWH", 
+    "Streatham Common Rail Station": "940GZSRC",  # SRC - Streatham Common
+    "Clapham Junction Rail Station": "940GZCLJ",  # CLJ - Clapham Junction
+    "Imperial Wharf Rail Station": "940GZIMW",    # IMW - Imperial Wharf
 }
 
 # --- Utility Functions ---
@@ -302,6 +305,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
