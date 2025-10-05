@@ -1,10 +1,12 @@
 import json
 import random
 from datetime import datetime, timedelta
+import pytz # Import pytz for timezone handling
 
 # --- Configuration ---
 LIVE_DATA_FILE = 'live_data.json'
 MAX_JOURNEYS_TO_SAVE = 3
+LONDON_TIMEZONE = pytz.timezone('Europe/London')
 STATIONS = {
     'SRC': 'Streatham Common Rail Station',
     'CLJ': 'Clapham Junction Rail Station',
@@ -43,11 +45,10 @@ class MockRailData:
     Simulates finding and stitching rail journeys for the required route.
     """
     def __init__(self):
-        # Base time for simulation (current time rounded to the nearest minute)
-        now = datetime.now()
-        self.base_time = now.replace(second=0, microsecond=0)
         self.journeys = []
         self.segment_id_counter = 1
+        # Set the current time explicitly to London time
+        self.london_now = datetime.now(LONDON_TIMEZONE)
 
     def generate_mock_leg(self, origin_code, dest_code, departure_dt, duration_mins):
         """Generates a single, realistic-looking leg for the journey."""
@@ -70,30 +71,36 @@ class MockRailData:
 
     def find_next_departures(self, count):
         """
-        Generates a sequence of the next 'count' available departure times
-        from the base station (SRC).
+        Generates a sequence of the next 'count' available departure times,
+        ensuring they are all in the future relative to the London time.
+        (Simulated frequency is 10 minutes, e.g., :00, :10, :20...)
         """
         departures = []
-        current_dt = self.base_time
         
-        # Start searching for departures 1 minute after the current time
-        current_dt += timedelta(minutes=1) 
+        # Start checking 1 minute from now in London Time
+        now_dt = self.london_now + timedelta(minutes=1)
+        current_dt = now_dt.replace(second=0, microsecond=0)
         
-        # Simulate trains leaving roughly every 10 minutes
+        SIMULATED_FREQUENCY_MINS = 10 
+        
+        # Calculate how many minutes until the next 10-minute interval (0, 10, 20, etc.)
+        target_minute_remainder = current_dt.minute % SIMULATED_FREQUENCY_MINS
+        
+        if target_minute_remainder == 0:
+            # If we are exactly at an interval (e.g., 14:30), the next one is 10 minutes later (14:40)
+            time_to_next_slot = SIMULATED_FREQUENCY_MINS
+        else:
+            # Calculate minutes needed to reach the next interval
+            time_to_next_slot = SIMULATED_FREQUENCY_MINS - target_minute_remainder
+
+        # Advance current_dt to the first truly future departure time
+        current_dt += timedelta(minutes=time_to_next_slot)
+
+        # Generate the next 'count' departures spaced by the simulated frequency
         while len(departures) < count:
-            # Snap to the next "scheduled" departure slot (e.g., :00, :10, :20, etc.)
-            minutes = current_dt.minute
-            next_minute = (minutes // 10 + 1) * 10 
-            
-            # If we are already past the 50 mark, roll over to the next hour
-            if next_minute >= 60:
-                current_dt = current_dt.replace(minute=0) + timedelta(hours=1)
-            else:
-                current_dt = current_dt.replace(minute=next_minute)
-
             departures.append(current_dt)
-            current_dt += timedelta(minutes=5) # Ensure a gap before checking the next slot
-
+            current_dt += timedelta(minutes=SIMULATED_FREQUENCY_MINS)
+            
         return departures
 
     def find_journeys(self):
@@ -101,12 +108,11 @@ class MockRailData:
         
         # 1. Determine the next available departure slots from SRC
         src_departures = self.find_next_departures(MAX_JOURNEYS_TO_SAVE)
-        # --- ADDED VERBOSE LOGGING: Show initial departures found ---
-        print(f"DEBUG: Found {len(src_departures)} unique departure times: {[format_time(dt) for dt in src_departures]}")
+        print(f"DEBUG: Found {len(src_departures)} unique departure times: {[format_time(dt) for dt in src_departures]} (All relative to London/UK time)")
 
         for i, src_dep_dt in enumerate(src_departures):
             # Simulate a mix of Direct and One-Change journeys (alternating)
-            is_direct = (i % 2 == 0) # e.g., 1st and 3rd are Direct, 2nd is One Change (just for variety)
+            is_direct = (i % 2 == 0) 
             
             if is_direct:
                 # --- Scenario 1: Direct Journey (SRC -> IMW) ---
@@ -123,7 +129,7 @@ class MockRailData:
                     "arrivalTime": first_leg['arrival'],
                     "departureTime": first_leg['departure'],
                     "segment_id": self.segment_id_counter,
-                    "live_updated_at": datetime.now().strftime('%H:%M:%S')
+                    "live_updated_at": self.london_now.strftime('%H:%M:%S')
                 }
                 self.journeys.append(journey)
             
@@ -142,7 +148,8 @@ class MockRailData:
                 clj_departure_base = clj_arr_dt + timedelta(minutes=random.randint(4, 7))
                 
                 for j in range(3): # Find 3 connection options
-                    clj_dep_dt = clj_departure_base + timedelta(minutes=j * 7)
+                    # Ensure departure times are staggered
+                    clj_dep_dt = clj_departure_base + timedelta(minutes=j * 7) 
                     duration_leg2 = random.randint(4, 6)
                     
                     # Generate Leg 2 data
@@ -159,9 +166,13 @@ class MockRailData:
                 # Calculate total journey time based on the first connection
                 first_connection_arrival = connections[0]['second_leg']['arrival']
                 
-                # Calculate Total Duration string (for the first connection option)
-                total_duration_str = calculate_duration_str(src_dep_dt, src_dep_dt + timedelta(minutes=duration_leg1) + timedelta(minutes=int(transfer_time.split(' ')[0])) + timedelta(minutes=duration_leg2))
-
+                # Calculate Total Duration string (using the first connection)
+                total_duration_str = calculate_duration_str(
+                    src_dep_dt, 
+                    src_dep_dt + timedelta(minutes=duration_leg1) + 
+                    timedelta(minutes=int(connections[0]['transferTime'].split(' ')[0])) + 
+                    timedelta(minutes=duration_leg2)
+                )
 
                 journey = {
                     "type": "One Change",
@@ -171,17 +182,15 @@ class MockRailData:
                     "arrivalTime": first_connection_arrival,
                     "departureTime": first_leg['departure'],
                     "segment_id": self.segment_id_counter,
-                    "live_updated_at": datetime.now().strftime('%H:%M:%S')
+                    "live_updated_at": self.london_now.strftime('%H:%M:%S')
                 }
                 self.journeys.append(journey)
 
-            # --- ADDED VERBOSE LOGGING: Show the result of the stitching process ---
             journey_type = "DIRECT" if is_direct else "ONE CHANGE"
             print(f"✓ Created {journey_type} Journey (Segment ID {self.segment_id_counter}): Depart {journey['departureTime']} / Arrive {journey['arrivalTime']}")
 
             self.segment_id_counter += 1
             
-            # Stop once we have the maximum required number of journeys
             if len(self.journeys) >= MAX_JOURNEYS_TO_SAVE:
                 break
 
@@ -191,16 +200,21 @@ def save_rail_data():
     harvester = MockRailData()
     harvester.find_journeys()
     
-    # Ensure only the first MAX_JOURNEYS_TO_SAVE are saved
     data_to_save = harvester.journeys[:MAX_JOURNEYS_TO_SAVE]
 
     try:
         with open(LIVE_DATA_FILE, 'w') as f:
             json.dump(data_to_save, f, indent=4)
-        # Kept the final success message simple
         print(f"✓ Successfully generated and saved {len(data_to_save)} journey segments to {LIVE_DATA_FILE}")
     except Exception as e:
         print(f"Error saving data to JSON: {e}")
 
 if __name__ == '__main__':
-    save_rail_data()
+    # Attempt to import and install pytz if it fails, ensuring the script runs smoothly in different environments
+    try:
+        save_rail_data()
+    except NameError:
+        print("Note: The 'pytz' library is required for precise UK timezone handling. Please ensure it is installed if running locally.")
+        # Fallback to the previous behavior if pytz is not available, using the local system time
+        global LONDON_TIMEZONE 
+        LONDON_TIMEZONE = pytz.timezone('UTC') # Set to UTC as a safe default if local TZ cannot be determined
