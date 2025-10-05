@@ -101,6 +101,8 @@ class MockRailData:
         
         # 1. Determine the next available departure slots from SRC
         src_departures = self.find_next_departures(MAX_JOURNEYS_TO_SAVE)
+        # --- ADDED VERBOSE LOGGING: Show initial departures found ---
+        print(f"DEBUG: Found {len(src_departures)} unique departure times: {[format_time(dt) for dt in src_departures]}")
 
         for i, src_dep_dt in enumerate(src_departures):
             # Simulate a mix of Direct and One-Change journeys (alternating)
@@ -173,6 +175,10 @@ class MockRailData:
                 }
                 self.journeys.append(journey)
 
+            # --- ADDED VERBOSE LOGGING: Show the result of the stitching process ---
+            journey_type = "DIRECT" if is_direct else "ONE CHANGE"
+            print(f"✓ Created {journey_type} Journey (Segment ID {self.segment_id_counter}): Depart {journey['departureTime']} / Arrive {journey['arrivalTime']}")
+
             self.segment_id_counter += 1
             
             # Stop once we have the maximum required number of journeys
@@ -191,6 +197,7 @@ def save_rail_data():
     try:
         with open(LIVE_DATA_FILE, 'w') as f:
             json.dump(data_to_save, f, indent=4)
+        # Kept the final success message simple
         print(f"✓ Successfully generated and saved {len(data_to_save)} journey segments to {LIVE_DATA_FILE}")
     except Exception as e:
         print(f"Error saving data to JSON: {e}")
