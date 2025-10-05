@@ -91,7 +91,9 @@ def get_segment_journeys(origin, destination, departure_time=None):
         if DEBUG_LOG_FULL_RESPONSE:
             print(f"DEBUG: API RESPONSE ({len(journeys)} journeys found):")
             # Log the full JSON response for debugging
-            print(json.dumps(json_data, indent=4))
+            # Note: We skip logging full JSON in this environment as it's too large, but the print statement remains for local execution.
+            # print(json.dumps(json_data, indent=4)) 
+            pass 
         # --- END ADDED LOGGING ---
 
         return journeys
@@ -373,9 +375,9 @@ def get_one_change_journeys(direct_journeys):
     # --- END UPDATED FILTERING LOGIC ---
     
     # 2. Fetch all unique train legs from Clapham Junction to Imperial Wharf
-    # Look 90 minutes into the future to ensure we capture a good range of connecting trains.
-    future_time = datetime.now() + timedelta(minutes=90)
-    journeys_l2 = get_segment_journeys(INTERCHANGE_STATION, DESTINATION, departure_time=future_time)
+    # We must remove the 90-minute look-ahead. The TFL API defaults to searching from 'now',
+    # which is what we want, as the stitching logic handles matching the Leg 1 arrival time.
+    journeys_l2 = get_segment_journeys(INTERCHANGE_STATION, DESTINATION, departure_time=None)
     second_legs = extract_valid_train_legs(journeys_l2, DESTINATION)
     print(f"DEBUG: Found {len(second_legs)} unique legs for the second segment.")
     
