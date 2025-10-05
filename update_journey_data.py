@@ -20,10 +20,6 @@ NUM_JOURNEYS = 8 # Target the next eight best segments (Direct or One Change)
 MIN_TRANSFER_TIME_MINUTES = 1 # Minimum acceptable transfer time
 MAX_RETRIES = 3 # Max retries for API calls
 
-# DEBUG FLAG: Set to True to print the full JSON response for debugging API calls.
-# Set to False to disable full JSON logging for production runs.
-DEBUG_LOG_FULL_RESPONSE = True
-
 # NOTE: Live platform lookups have been removed as the TFL StopPoint API frequently
 # returns 404 for these National Rail stations. Platform data will default to "TBC".
 
@@ -74,29 +70,11 @@ def get_segment_journeys(origin, destination, departure_time=None):
     if TFL_APP_ID and TFL_APP_KEY:
         params["app_id"] = TFL_APP_ID
         params["app_key"] = TFL_APP_KEY
-
-    # --- ADDED VERBOSE LOGGING: Request Details ---
-    print(f"DEBUG: API CALL - URL: {url}")
-    # Remove app_id/key from the printed params for security
-    safe_params = {k: v for k, v in params.items() if k not in ['app_id', 'app_key']}
-    print(f"DEBUG: API CALL - PARAMS: {safe_params}")
-    # --- END ADDED LOGGING ---
     
     print(f"[{datetime.now().strftime('%H:%M:%S')}] Fetching segment journeys from {origin} to {destination}...")
     try:
         json_data = retry_fetch(url, params)
-        journeys = json_data.get('journeys', []) if json_data else []
-        
-        # --- ADDED VERBOSE LOGGING: Response Details ---
-        if DEBUG_LOG_FULL_RESPONSE:
-            print(f"DEBUG: API RESPONSE ({len(journeys)} journeys found):")
-            # Log the full JSON response for debugging
-            # Note: We skip logging full JSON in this environment as it's too large, but the print statement remains for local execution.
-            # print(json.dumps(json_data, indent=4)) 
-            pass 
-        # --- END ADDED LOGGING ---
-
-        return journeys
+        return json_data.get('journeys', []) if json_data else []
     except Exception as e:
         print(f"ERROR: Failed to get segment journeys for {origin} to {destination}: {e}")
         return []
@@ -375,8 +353,7 @@ def get_one_change_journeys(direct_journeys):
     # --- END UPDATED FILTERING LOGIC ---
     
     # 2. Fetch all unique train legs from Clapham Junction to Imperial Wharf
-    # We must remove the 90-minute look-ahead. The TFL API defaults to searching from 'now',
-    # which is what we want, as the stitching logic handles matching the Leg 1 arrival time.
+    # FIX APPLIED HERE: Remove the look-ahead to capture all future-dated connections.
     journeys_l2 = get_segment_journeys(INTERCHANGE_STATION, DESTINATION, departure_time=None)
     second_legs = extract_valid_train_legs(journeys_l2, DESTINATION)
     print(f"DEBUG: Found {len(second_legs)} unique legs for the second segment.")
