@@ -78,6 +78,9 @@
             const claphamPlatformKey = Object.keys(secondLeg).find(key => key.startsWith('departurePlatform_Clapham'));
             const platformDisplay = secondLeg[claphamPlatformKey] || 'TBC';
             
+            // Total Duration is now shown on ALL connections with the new requested phrasing
+            const durationDisplay = `<p class="font-bold text-sm text-green-400">Total journey: ${totalDuration}</p>`;
+            
             return `
                 <div class="p-4 rounded-lg border border-gray-700 bg-gray-900 shadow-md">
                     
@@ -95,8 +98,8 @@
                     <!-- Platform & Total Duration Footer -->
                     <div class="flex justify-between items-center text-xs text-gray-400 pt-2 mt-2 border-t border-gray-700">
                         <p>Platform: <span class="font-semibold text-white">${platformDisplay}</span></p>
-                        <!-- Total Duration moved to bottom right of the box -->
-                        ${isFirst ? `<p class="font-bold text-sm text-green-400">Total Duration: ${totalDuration}</p>` : ''}
+                        <!-- Total Duration now displayed here on every connection -->
+                        ${durationDisplay}
                     </div>
                 </div>
             `;
@@ -128,7 +131,7 @@
                 ? `1 possible train to catch to Imperial Wharf`
                 : `${connectionCount} possible trains to catch to Imperial Wharf`;
 
-            // Render connections (only first one needs totalDuration if one change)
+            // Render connections 
             const connectionsHtml = journey.connections ? journey.connections.map((conn, index) => 
                 renderConnection(conn, index === 0, journey.totalDuration)
             ).join('') : '';
@@ -233,3 +236,4 @@
     </script>
 </body>
 </html>
+
