@@ -94,7 +94,6 @@
         const renderConnectionDetails = (conn, journey) => {
             const secondLeg = conn.second_leg;
             const transferTime = conn.transferTime;
-            // totalDurationToDisplay is no longer used in the output but is available if needed
             
             // Get Platform for Clapham Jcn
             const claphamPlatformKey = Object.keys(secondLeg).find(key => key.startsWith('departurePlatform_Clapham'));
@@ -165,9 +164,15 @@
             const firstLegDuration = calculateDuration(firstLeg.departure, firstLeg.arrival);
 
             let connectionsHtml = '';
+            let connectionCountDisplay = 0; // Initialize a variable to hold the number of displayed connections
+
             if (!isDirect && journey.connections) {
-                // Generate all connection details for One Change journeys
-                connectionsHtml = journey.connections.map(conn => renderConnectionDetails(conn, journey)).join('');
+                // Limit to the first two connections as requested
+                const connectionsToDisplay = journey.connections.slice(0, 2);
+                connectionCountDisplay = connectionsToDisplay.length;
+                
+                // Generate connection details for the limited list
+                connectionsHtml = connectionsToDisplay.map(conn => renderConnectionDetails(conn, journey)).join('');
             }
             
             // Determine the destination text based on journey type
@@ -218,9 +223,10 @@
 
 
                     <!-- CONNECTIONS LIST (for One Change journeys only) -->
-                    ${!isDirect && journey.connections ? `
+                    ${!isDirect && journey.connections && journey.connections.length > 0 ? `
                         <div class="space-y-4">
-                            <p class="text-base font-semibold text-yellow-400">${journey.connections.length} Connection${journey.connections.length > 1 ? 's' : ''} via Clapham Junction:</p>
+                            <!-- Display the actual count of connections being shown (max 2) -->
+                            <p class="text-base font-semibold text-yellow-400">Next ${connectionCountDisplay} Connection${connectionCountDisplay !== 1 ? 's' : ''} via Clapham Junction:</p>
                             ${connectionsHtml}
                         </div>
                     ` : ''}
