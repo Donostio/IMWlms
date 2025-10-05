@@ -16,13 +16,12 @@ INTERCHANGE_STATION = "Clapham Junction Rail Station"
 
 # TFL API endpoint
 TFL_BASE_URL = "https://api.tfl.gov.uk"
-NUM_JOURNEYS = 8 # Target the next eight best stitched segments (First Legs)
+NUM_JOURNEYS = 8 # Target the next eight best segments (Direct or One Change)
 MIN_TRANSFER_TIME_MINUTES = 3 # Minimum acceptable transfer time
 MAX_RETRIES = 3 # Max retries for API calls
 
 # NOTE: Live platform lookups have been removed as the TFL StopPoint API frequently
 # returns 404 for these National Rail stations. Platform data will default to "TBC".
-# NAPTAN_IDS dictionary and related platform fetching functions have been deleted.
 
 # --- Utility Functions ---
 
@@ -34,7 +33,6 @@ def retry_fetch(url, params, max_retries=MAX_RETRIES):
             response.raise_for_status()
             return response.json()
         except requests.exceptions.HTTPError as e:
-            # Removed the 404 StopPoint handling here as the platform fetch functions were removed.
             print(f"ERROR fetching data ({e}): Attempt {attempt + 1}/{max_retries}. Retrying in {2**attempt}s...")
             if attempt < max_retries - 1:
                 time.sleep(2**attempt)
@@ -50,7 +48,7 @@ def retry_fetch(url, params, max_retries=MAX_RETRIES):
 def get_segment_journeys(origin, destination, departure_time=None):
     """
     Fetch a list of planned journeys for a single segment using the TFL Journey Planner.
-    This is used to get all viable train legs for stitching.
+    This is used to get all viable train legs for stitching or direct routes.
     The optional departure_time forces the TFL API to search from a specific point.
     """
     url = f"{TFL_BASE_URL}/Journey/JourneyResults/{origin}/to/{destination}"
@@ -106,8 +104,10 @@ def extract_valid_train_legs(journeys, expected_destination):
     
     return list(unique_legs)
 
-def group_connections_by_first_leg(first_legs, second_legs, num_segments):
-    """Groups valid second legs (connections) under their corresponding first leg."""
+def group_connections_by_first_leg(first_legs, second_legs):
+    """
+    Groups valid second legs (connections) under their corresponding first leg (L1).
+    """
     
     grouped_segments = {}
     
@@ -128,16 +128,17 @@ def group_connections_by_first_leg(first_legs, second_legs, num_segments):
         # --- Prepare First Leg Data Structure ---
         if leg1_key not in grouped_segments:
             
-            # Live platform data is disabled, default to TBC
-            first_platform = "TBC"
+            # PLATFORM EXTRACTION LOGIC:
+            first_platform = leg1.get('platform', 'TBC')
 
             dep_time_l1 = datetime.fromisoformat(leg1['departureTime'])
             arr_time_l1 = datetime.fromisoformat(leg1['arrivalTime'])
             
             # Extract scheduled time
             scheduled_dep = leg1.get('scheduledDepartureTime')
-            # Format the scheduled time, default to the expected time if not present
             scheduled_dep_str = datetime.fromisoformat(scheduled_dep).strftime('%H:%M') if scheduled_dep else dep_time_l1.strftime('%H:%M')
+            
+            operator_id = leg1.get('operator', {}).get('id', 'N/A')
 
             first_leg_data = {
                 "origin": leg1['departurePoint']['commonName'],
@@ -146,12 +147,13 @@ def group_connections_by_first_leg(first_legs, second_legs, num_segments):
                 "scheduled_departure": scheduled_dep_str, # NEW FIELD for displaying delay
                 "arrival": arr_time_l1.strftime('%H:%M'),
                 f"departurePlatform_{leg1['departurePoint']['commonName'].split(' ')[0]}": first_platform,
-                "operator": leg1.get('operator', {}).get('id', 'N/A'),
+                "operator": operator_id,
                 "status": leg1.get('status', 'On Time'),
                 "rawArrivalTime": leg1['arrivalTime']
             }
 
             grouped_segments[leg1_key] = {
+                "type": "One Change", # Label the journey type
                 "first_leg": first_leg_data,
                 "connections": []
             }
@@ -164,13 +166,10 @@ def group_connections_by_first_leg(first_legs, second_legs, num_segments):
             time_difference = dep_time_l2 - arr_time_l1
             transfer_time_minutes = int(time_difference.total_seconds() / 60)
             
-            # The previous detailed per-combination print is removed for cleaner logs.
-            # The logic here correctly filters out negative/too short transfers.
-            
             if transfer_time_minutes >= MIN_TRANSFER_TIME_MINUTES:
                 
-                # Live platform data is disabled, default to TBC
-                second_platform = "TBC"
+                # PLATFORM EXTRACTION LOGIC:
+                second_platform = leg2.get('platform', 'TBC')
 
                 dep_time_l2 = datetime.fromisoformat(leg2['departureTime'])
                 arr_time_l2 = datetime.fromisoformat(leg2['arrivalTime'])
@@ -192,27 +191,35 @@ def group_connections_by_first_leg(first_legs, second_legs, num_segments):
                     "second_leg": second_leg_data
                 })
 
-    # 4. Final Processing and Formatting
+    # Final Processing and Formatting (for stitched legs)
     final_output = []
     
     # Filter segments to only include those with at least one connection
     segments_with_connections = [s for s in grouped_segments.values() if s['connections']]
     
-    # Sort the list of segments by the departure time of the first leg
-    sorted_segments = sorted(segments_with_connections, key=lambda x: datetime.strptime(x['first_leg']['departure'], '%H:%M'))
-    
-    current_time = datetime.now().strftime('%H:%M:%S')
-
-    for idx, segment in enumerate(sorted_segments):
-        # Sort connections for each first leg by the departure time of the second leg
+    # Sort connections for each first leg by the departure time of the second leg
+    for segment in segments_with_connections:
         segment['connections'].sort(key=lambda x: datetime.strptime(x['second_leg']['departure'], '%H:%M'))
         
-        # Add metadata and clean up internal fields
-        segment['segment_id'] = idx + 1
-        segment['live_updated_at'] = current_time
+        # Calculate total duration for the stitched journey (approximate)
+        l1_dep = datetime.strptime(segment['first_leg']['departure'], '%H:%M')
+        l2_arr = datetime.strptime(segment['connections'][0]['second_leg']['arrival'], '%H:%M')
+        
+        # Handle time crossing midnight for duration calculation
+        if l2_arr < l1_dep:
+            l2_arr += timedelta(days=1)
+        
+        total_duration = l2_arr - l1_dep
+        segment['totalDuration'] = f"{int(total_duration.total_seconds() / 60)} min"
+        segment['arrivalTime'] = segment['connections'][0]['second_leg']['arrival']
+        segment['departureTime'] = segment['first_leg']['departure']
         
         # Remove raw times from final output
         segment['first_leg'].pop('rawArrivalTime')
+        
+        # Create the unique identifier for the segment (used in main for final sorting/filtering)
+        segment['unique_id'] = (segment['first_leg']['departure'], segment['first_leg']['operator'])
+
         for conn in segment['connections']:
             conn['second_leg'].pop('rawDepartureTime')
             
@@ -220,16 +227,83 @@ def group_connections_by_first_leg(first_legs, second_legs, num_segments):
         
         # Log the result for the console output
         conn_times = [c['second_leg']['departure'] for c in segment['connections']]
-        print(f"✓ Segment {idx + 1} ({segment['first_leg']['departure']} → {segment['first_leg']['arrival']}): Found {len(conn_times)} connections ({', '.join(conn_times)})")
-
-    # Limit to NUM_JOURNEYS segments
-    return final_output[:num_segments]
+        print(f"✓ Stitched Segment ({segment['first_leg']['departure']} → {segment['first_leg']['arrival']}): Found {len(conn_times)} connections ({', '.join(conn_times)})")
 
 
-def stitch_and_process_journeys(num_segments):
+    return final_output
+
+def process_direct_journey(journey, leg):
+    """Processes a single leg (direct journey) into the final segment format."""
+    
+    # PLATFORM EXTRACTION LOGIC:
+    first_platform = leg.get('platform', 'TBC')
+
+    dep_time = datetime.fromisoformat(leg['departureTime'])
+    arr_time = datetime.fromisoformat(leg['arrivalTime'])
+    
+    # Extract scheduled time
+    scheduled_dep = leg.get('scheduledDepartureTime')
+    scheduled_dep_str = datetime.fromisoformat(scheduled_dep).strftime('%H:%M') if scheduled_dep else dep_time.strftime('%H:%M')
+    
+    # Calculate total duration from TFL journey object
+    total_duration = journey.get('duration', 'N/A')
+    
+    operator_id = leg.get('operator', {}).get('id', 'N/A')
+    # Unique identifier for the direct train
+    unique_id = (dep_time.strftime('%H:%M'), operator_id)
+
+    return {
+        "type": "Direct", 
+        "departureTime": dep_time.strftime('%H:%M'),
+        "arrivalTime": arr_time.strftime('%H:%M'),
+        "totalDuration": f"{total_duration} min" if isinstance(total_duration, int) else total_duration,
+        "status": leg.get('status', 'On Time'),
+        "unique_id": unique_id, # Add unique identifier for cross-referencing
+        # Note: segment_id and live_updated_at are added in main()
+        "first_leg": {
+            "origin": leg['departurePoint']['commonName'],
+            "destination": leg['arrivalPoint']['commonName'],
+            "departure": dep_time.strftime('%H:%M'),
+            "scheduled_departure": scheduled_dep_str,
+            "arrival": arr_time.strftime('%H:%M'),
+            f"departurePlatform_{leg['departurePoint']['commonName'].split(' ')[0]}": first_platform,
+            "operator": operator_id,
+            "status": leg.get('status', 'On Time'),
+        },
+        "connections": [] # Direct trains have no connections
+    }
+
+
+def get_direct_journeys():
+    """Fetches and processes direct journeys from ORIGIN to DESTINATION."""
+    print(f"\n[{datetime.now().strftime('%H:%M:%S')}] Fetching direct journeys from {ORIGIN} to {DESTINATION}...")
+    
+    # Get all journeys from Streatham Common to Imperial Wharf
+    journeys = get_segment_journeys(ORIGIN, DESTINATION)
+    direct_journeys = []
+
+    for journey in journeys:
+        # Check for direct train: Journey has exactly one leg, and that leg is a train.
+        if len(journey.get('legs', [])) == 1:
+            leg = journey['legs'][0]
+            if leg.get('mode', {}).get('id') in ['overground', 'national-rail']:
+                
+                # Check that the leg destination is the final destination (Imperial Wharf)
+                if leg.get('arrivalPoint', {}).get('commonName') == DESTINATION:
+                    
+                    # Process and format the direct journey
+                    processed_journey = process_direct_journey(journey, leg)
+                    direct_journeys.append(processed_journey)
+                    
+                    print(f"✓ Found direct journey: {processed_journey['departureTime']} → {processed_journey['arrivalTime']}")
+                    
+    return direct_journeys
+
+
+def get_one_change_journeys(direct_journeys):
     """
-    Fetches all train legs for the two segments and manually groups them together
-    to show all possible connections.
+    Fetches all train legs for the two segments, manually groups them, and filters
+    out any first legs that correspond to a direct journey.
     """
     
     # 1. Fetch all unique train legs from Streatham Common to Clapham Junction (searches from now)
@@ -237,20 +311,48 @@ def stitch_and_process_journeys(num_segments):
     first_legs = extract_valid_train_legs(journeys_l1, INTERCHANGE_STATION)
     print(f"DEBUG: Found {len(first_legs)} unique legs for the first segment.")
     
+    if not first_legs:
+        print("ERROR: Could not retrieve any first train legs.")
+        return []
+
+    # --- NEW FILTERING LOGIC ---
+    # Create a set of unique identifiers (departure time, operator ID) for all found direct trains.
+    # This identifies the services that MUST NOT be used as Leg 1 in a stitched journey.
+    direct_train_ids = {
+        j['unique_id'] 
+        for j in direct_journeys
+    }
+    
+    # Filter out any Leg 1 that matches a direct train service
+    filtered_first_legs = []
+    
+    for leg in first_legs:
+        # TFL returns the full train journey's operator even when segmenting a leg
+        leg_id = (datetime.fromisoformat(leg['departureTime']).strftime('%H:%M'), leg.get('operator', {}).get('id'))
+        
+        if leg_id in direct_train_ids:
+            print(f"DEBUG: Filtering Leg 1 {leg_id[0]} as it is a known direct service.")
+            continue
+            
+        filtered_first_legs.append(leg)
+
+    first_legs = filtered_first_legs
+    print(f"DEBUG: Filtered down to {len(first_legs)} unique Leg 1s (non-direct).")
+    # --- END NEW FILTERING LOGIC ---
+    
     # 2. Fetch all unique train legs from Clapham Junction to Imperial Wharf
-    # To ensure we capture connections for later L1 segments (e.g., 11:20 and 11:50), 
-    # we force the search to look 90 minutes into the future to get a wider range of connecting trains.
+    # Look 90 minutes into the future to ensure we capture a good range of connecting trains.
     future_time = datetime.now() + timedelta(minutes=90)
     journeys_l2 = get_segment_journeys(INTERCHANGE_STATION, DESTINATION, departure_time=future_time)
     second_legs = extract_valid_train_legs(journeys_l2, DESTINATION)
     print(f"DEBUG: Found {len(second_legs)} unique legs for the second segment.")
     
-    if not first_legs or not second_legs:
+    if not second_legs:
         print("ERROR: Could not retrieve sufficient train legs for stitching.")
         return []
 
     # 3. Group and process the connections
-    processed_segments = group_connections_by_first_leg(first_legs, second_legs, num_segments)
+    processed_segments = group_connections_by_first_leg(first_legs, second_legs)
 
     if not processed_segments:
         print(f"No valid segments found with connections meeting the minimum {MIN_TRANSFER_TIME_MINUTES}-minute transfer.")
@@ -258,17 +360,46 @@ def stitch_and_process_journeys(num_segments):
 
     return processed_segments
 
-# The main function is now simplified to use the new stitching logic
 def main():
-    data = stitch_and_process_journeys(NUM_JOURNEYS)
+    # 1. Get Direct Journeys
+    direct_data = get_direct_journeys()
     
-    if data:
+    # 2. Get One-Change Journeys (Stitched), filtering out the direct trains
+    # The get_one_change_journeys function now handles filtering based on direct_data
+    stitched_data = get_one_change_journeys(direct_data) 
+    
+    # 3. Combine and Sort all results
+    combined_data = direct_data + stitched_data
+    
+    # Sort the list by the departure time of the first leg (or direct journey)
+    sorted_data = sorted(combined_data, key=lambda x: datetime.strptime(x['first_leg']['departure'], '%H:%M'))
+    
+    # 4. Add IDs, Timestamps, and slice the final list
+    final_output = []
+    current_time = datetime.now().strftime('%H:%M:%S')
+
+    for idx, segment in enumerate(sorted_data):
+        # Assign unified metadata
+        segment['segment_id'] = idx + 1
+        segment['live_updated_at'] = current_time
+        
+        # Remove the temporary unique_id field before final output
+        if 'unique_id' in segment:
+            segment.pop('unique_id')
+        
+        final_output.append(segment)
+
+    # Limit to NUM_JOURNEYS segments (the best N options overall)
+    final_output = final_output[:NUM_JOURNEYS]
+    
+    if final_output:
         with open(OUTPUT_FILE, 'w') as f:
-            json.dump(data, f, indent=4)
-        print(f"\n✓ Successfully saved {len(data)} journey segments to {OUTPUT_FILE}")
+            json.dump(final_output, f, indent=4)
+        print(f"\n✓ Successfully saved {len(final_output)} journey segments (Direct and One Change) to {OUTPUT_FILE}")
     else:
         print(f"\n⚠ Failed to retrieve or process any valid journey data. {OUTPUT_FILE} remains unchanged.")
 
 
 if __name__ == "__main__":
     main()
+
