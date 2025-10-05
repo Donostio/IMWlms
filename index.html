@@ -69,47 +69,35 @@
 
     <script type="text/javascript">
         
-        // --- Helper Function for Connections ---
-        const renderConnection = (conn, isFirst, totalDuration) => {
-            const secondLeg = conn.second_leg;
-            const transferTime = conn.transferTime; // e.g., "13 min"
+        // --- Utility to calculate duration between two HH:mm strings ---
+        const calculateDuration = (startTimeStr, endTimeStr) => {
+            const [startH, startM] = startTimeStr.split(':').map(Number);
+            const [endH, endM] = endTimeStr.split(':').map(Number);
             
-            // Dynamically find the platform key for the second leg (Clapham Junction)
-            const claphamPlatformKey = Object.keys(secondLeg).find(key => key.startsWith('departurePlatform_Clapham'));
-            const platformDisplay = secondLeg[claphamPlatformKey] || 'TBC';
-            
-            // Total Duration is now shown on ALL connections with the new requested phrasing
-            const durationDisplay = `<p class="font-bold text-sm text-green-400">Total journey: ${totalDuration}</p>`;
-            
-            return `
-                <div class="p-4 rounded-lg border border-gray-700 bg-gray-900 shadow-md">
-                    
-                    <!-- Transfer Time (Bigger, Bolder, Rewritten) -->
-                    <div class="text-center mb-3">
-                        <p class="text-3xl font-black text-yellow-400">${transferTime} transfer</p>
-                    </div>
-                    
-                    <!-- Second Leg Details (The Connection) -->
-                    <div class="flex justify-between items-center text-lg font-medium">
-                        <p>${secondLeg.departure} <span class="text-gray-400">from Clapham Jcn</span></p>
-                        <p>${secondLeg.arrival} <span class="text-gray-400">to IW</span></p>
-                    </div>
-                    
-                    <!-- Platform & Total Duration Footer -->
-                    <div class="flex justify-between items-center text-xs text-gray-400 pt-2 mt-2 border-t border-gray-700">
-                        <p>Platform: <span class="font-semibold text-white">${platformDisplay}</span></p>
-                        <!-- Total Duration now displayed here on every connection -->
-                        ${durationDisplay}
-                    </div>
-                </div>
-            `;
+            let startDate = new Date();
+            startDate.setHours(startH, startM, 0, 0);
+
+            let endDate = new Date();
+            endDate.setHours(endH, endM, 0, 0);
+
+            // Handle case where end time wraps to the next day (e.g., 23:50 -> 00:10)
+            if (endDate < startDate) {
+                endDate.setDate(endDate.getDate() + 1);
+            }
+
+            const diffMs = endDate - startDate;
+            const diffMins = Math.round(diffMs / 60000); // convert milliseconds to minutes
+            return diffMins;
         };
-        
-        // --- Main Card Renderer ---
-        const renderJourneyCard = (journey) => {
+
+        // --- Helper Function to render ONE complete journey option (Leg 1 + Transfer + Leg 2) ---
+        const renderOneChangeOption = (journey, conn) => {
             const firstLeg = journey.first_leg;
+            const secondLeg = conn.second_leg;
+            const transferTime = conn.transferTime;
+            const totalDurationToDisplay = journey.totalDuration; // Placeholder until data script update
             
-            // Determine colors based on operator (for visual flair)
+            // First Leg Operator Color
             const operatorId = firstLeg.operator;
             let operatorColor = 'text-gray-400';
             if (operatorId && operatorId.toLowerCase().includes('southern')) {
@@ -117,73 +105,144 @@
             } else if (operatorId && operatorId.toLowerCase().includes('overground')) {
                 operatorColor = 'text-overground-orange';
             }
-            
-            // First Leg Header: Remove "Segment X: " and use " - "
-            const timeRangeDisplay = `${firstLeg.departure} - ${firstLeg.arrival}`;
-            
-            // Dynamically find the platform key for the first leg (Streatham Common)
+
+            // Get Platforms
             const streathamPlatformKey = Object.keys(firstLeg).find(key => key.startsWith('departurePlatform_Streatham'));
             const streathamPlatform = firstLeg[streathamPlatformKey] || 'TBC';
+            const claphamPlatformKey = Object.keys(secondLeg).find(key => key.startsWith('departurePlatform_Clapham'));
+            const claphamPlatform = secondLeg[claphamPlatformKey] || 'TBC';
             
-            // Connections Header: Use new wording
-            const connectionCount = journey.connections ? journey.connections.length : 0;
-            const connectionHeader = connectionCount === 1 
-                ? `1 possible train to catch to Imperial Wharf`
-                : `${connectionCount} possible trains to catch to Imperial Wharf`;
-
-            // Render connections 
-            const connectionsHtml = journey.connections ? journey.connections.map((conn, index) => 
-                // Pass totalDuration to renderConnection for display in every box
-                renderConnection(conn, index === 0, journey.totalDuration)
-            ).join('') : '';
-
+            // Calculate leg durations
+            const firstLegDuration = calculateDuration(firstLeg.departure, firstLeg.arrival);
+            const secondLegDuration = calculateDuration(secondLeg.departure, secondLeg.arrival);
+            
             return `
-                <div class="card-bg p-6 rounded-xl border border-gray-800">
+                <div class="card-bg p-4 sm:p-6 rounded-xl border border-gray-800 space-y-3">
                     
-                    <!-- Main Time Range and Status -->
-                    <div class="flex justify-between items-center mb-4 pb-2 border-b border-gray-700">
-                        <h2 class="font-extrabold text-white">
-                            ${timeRangeDisplay}
-                        </h2>
-                        <span class="text-sm font-semibold p-1 rounded ${journey.status === 'On Time' ? 'bg-green-600' : 'bg-red-600'} text-white">
+                    <!-- Main Header Row: Departure Time and Total Duration -->
+                    <div class="flex justify-between items-center pb-2 border-b border-gray-700">
+                        <h3 class="text-3xl font-extrabold text-white">
+                            ${firstLeg.departure}
+                        </h3>
+                        <p class="text-lg font-semibold text-green-400">Total: ${totalDurationToDisplay}</p>
+                    </div>
+
+                    <!-- Journey Steps (Mimicking the 3-row flat structure from the image) -->
+                    <div class="space-y-3">
+                        
+                        <!-- 1. First Leg (SC -> CJ) -->
+                        <div class="flex justify-between text-sm items-center">
+                            <div class="w-1/3 font-medium text-white">
+                                <span class="block">${firstLeg.departure} - ${firstLeg.arrival}</span>
+                                <span class="text-xs text-gray-500 block">${firstLegDuration} mins</span>
+                            </div>
+                            <div class="w-1/3 text-center text-gray-400 text-xs font-medium">
+                                Streatham Common $\rightarrow$ Clapham Jcn
+                            </div>
+                            <div class="w-1/3 text-right">
+                                <span class="font-semibold text-white block">P: ${streathamPlatform}</span>
+                                <span class="text-xs ${operatorColor}">${firstLeg.operator}</span>
+                            </div>
+                        </div>
+
+                        <!-- 2. Transfer Row (Bigger and bolder, with yellow accent) -->
+                        <div class="flex justify-between text-sm items-center py-1 border-y border-gray-800 bg-gray-900 rounded-md px-2">
+                            <span class="text-xl font-black text-yellow-400">${transferTime} transfer</span>
+                            <span class="text-xs text-gray-400">at Clapham Junction</span>
+                        </div>
+
+                        <!-- 3. Second Leg (CJ -> IW) -->
+                        <div class="flex justify-between text-sm items-center">
+                            <div class="w-1/3 font-medium text-white">
+                                <span class="block">${secondLeg.departure} - ${secondLeg.arrival}</span>
+                                <span class="text-xs text-gray-500 block">${secondLegDuration} mins</span>
+                            </div>
+                            <div class="w-1/3 text-center text-gray-400 text-xs font-medium">
+                                Clapham Jcn $\rightarrow$ Imperial Wharf
+                            </div>
+                            <div class="w-1/3 text-right">
+                                <span class="font-semibold text-white block">P: ${claphamPlatform}</span>
+                                <span class="text-xs ${operatorColor}">${secondLeg.operator}</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Footer Status -->
+                    <div class="pt-2 border-t border-gray-700 text-right">
+                        <span class="text-sm font-semibold p-1 px-2 rounded ${journey.status === 'On Time' ? 'bg-green-600' : 'bg-red-600'} text-white">
                             ${journey.status}
                         </span>
                     </div>
-
-                    <!-- First Leg Details (The train from Streatham Common) -->
-                    <div class="space-y-2 text-sm">
-                        <div class="flex justify-between">
-                            <p class="text-gray-300">Scheduled:</p>
-                            <p class="font-semibold text-white">${firstLeg.scheduled_departure}</p>
-                        </div>
-                        <div class="flex justify-between">
-                            <p class="text-gray-300">Platform:</p>
-                            <p class="font-semibold text-white">${streathamPlatform}</p>
-                        </div>
-                        <div class="flex justify-between">
-                            <p class="text-gray-300">Operator:</p>
-                            <p class="font-semibold ${operatorColor}">${operatorId}</p>
-                        </div>
-                    </div>
-                    
-                    <!-- Connections Section (Only for One Change journeys) -->
-                    ${journey.type === 'One Change' ? `
-                        <div class="mt-6 pt-4 border-t border-gray-700">
-                            <!-- New connections header -->
-                            <p class="text-base font-semibold mb-3 text-yellow-400">${connectionHeader}</p>
-                            
-                            <div class="space-y-4">
-                                ${connectionsHtml}
-                            </div>
-                        </div>
-                    ` : `
-                        <div class="mt-6 pt-4 border-t border-gray-700">
-                            <p class="text-base font-semibold text-green-500">DIRECT Train - No Change Required</p>
-                            <p class="text-sm text-gray-400 pt-1">Total Duration: <span class="font-bold text-white">${journey.totalDuration}</span></p>
-                        </div>
-                    `}
                 </div>
             `;
+        };
+
+        
+        // --- Main Card Renderer ---
+        const renderJourneyCard = (journey) => {
+            if (journey.type === 'Direct') {
+                // If it's a direct journey, render a simple single card.
+                const firstLeg = journey.first_leg;
+                const operatorId = firstLeg.operator;
+                let operatorColor = 'text-gray-400';
+                if (operatorId && operatorId.toLowerCase().includes('southern')) {
+                    operatorColor = 'text-southern-green';
+                } else if (operatorId && operatorId.toLowerCase().includes('overground')) {
+                    operatorColor = 'text-overground-orange';
+                }
+                const streathamPlatformKey = Object.keys(firstLeg).find(key => key.startsWith('departurePlatform_Streatham'));
+                const streathamPlatform = firstLeg[streathamPlatformKey] || 'TBC';
+                const duration = calculateDuration(firstLeg.departure, firstLeg.arrival);
+
+                return `
+                    <div class="card-bg p-4 sm:p-6 rounded-xl border border-gray-800 space-y-3">
+                        
+                        <!-- Main Header Row -->
+                        <div class="flex justify-between items-center pb-2 border-b border-gray-700">
+                            <h3 class="text-3xl font-extrabold text-white">
+                                ${firstLeg.departure}
+                            </h3>
+                            <p class="text-lg font-semibold text-green-400">Total: ${journey.totalDuration}</p>
+                        </div>
+
+                        <!-- Journey Details -->
+                        <div class="space-y-3">
+                            <div class="flex justify-between text-sm items-center py-2 bg-gray-900 rounded-md px-2">
+                                <div class="w-1/3 font-medium text-white">
+                                    <span class="block">${firstLeg.departure} - ${firstLeg.arrival}</span>
+                                    <span class="text-xs text-gray-500 block">${duration} mins</span>
+                                </div>
+                                <div class="w-1/3 text-center text-green-500 font-bold">
+                                    DIRECT TRAIN
+                                </div>
+                                <div class="w-1/3 text-right">
+                                    <span class="font-semibold text-white block">P: ${streathamPlatform}</span>
+                                    <span class="text-xs ${operatorColor}">${firstLeg.operator}</span>
+                                </div>
+                            </div>
+                            <div class="text-center text-xs text-gray-500">
+                                Streatham Common $\rightarrow$ Imperial Wharf (No changes)
+                            </div>
+                        </div>
+                        
+                        <!-- Footer Status -->
+                        <div class="pt-2 border-t border-gray-700 text-right">
+                            <span class="text-sm font-semibold p-1 px-2 rounded ${journey.status === 'On Time' ? 'bg-green-600' : 'bg-red-600'} text-white">
+                                ${journey.status}
+                            </span>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // If it's a One Change Journey, generate a card for *each* connection option
+            let connectionsHtml = '';
+            if (journey.connections) {
+                journey.connections.forEach(conn => {
+                    connectionsHtml += renderOneChangeOption(journey, conn);
+                });
+            }
+            return connectionsHtml;
         };
 
 
@@ -198,6 +257,7 @@
 
             try {
                 // Fetch the static JSON file
+                // Adding a cache-buster query parameter
                 const response = await fetch('live_data.json?t=' + new Date().getTime());
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
@@ -206,12 +266,15 @@
                 const data = await response.json();
                 
                 // Hide loading and render results
+                // The map/join handles the new structure where renderJourneyCard may return multiple HTML blocks
                 const renderedHtml = data.map(renderJourneyCard).join('');
-                journeyListElement.innerHTML = renderedHtml;
+                journeyListElement.innerHTML = renderedHtml || `
+                    <div class="text-center p-8 text-gray-400">No journeys found in live_data.json.</div>
+                `;
 
                 if (data.length > 0) {
+                    // Assuming the timestamp is the same for all entries in the run
                     const lastUpdated = data[0].live_updated_at;
-                    // Updated to use white/gray text colors
                     statusElement.innerHTML = `Data last updated by Harvester at: <span class="font-bold text-white">${lastUpdated}</span>`;
                 } else {
                     statusElement.innerHTML = `No recent data available. Waiting for next run.`;
