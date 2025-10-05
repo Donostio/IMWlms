@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Next Rail Journeys (Stitched)</title>
+    <title>Next Rail Connections (SCR → IW)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -13,7 +13,8 @@
                         'rail-blue': '#003366',
                         'rail-yellow': '#FFCC00',
                         'southern-green': '#006633',
-                        'overground-orange': '#FF7D00', // London Overground color
+                        'overground-orange': '#FF7D00',
+                        'overground-dark': '#B24E00',
                     },
                     fontFamily: {
                         sans: ['Inter', 'sans-serif'],
@@ -27,11 +28,6 @@
         .card-bg {
             background: #ffffff;
             box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-            transition: transform 0.3s ease;
-        }
-        .card-bg:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 15px 25px -5px rgba(0, 0, 0, 0.15);
         }
         .refresh-icon {
             animation: spin 1s linear infinite;
@@ -41,177 +37,183 @@
             from { transform: rotate(0deg); }
             to { transform: rotate(360deg); }
         }
-        .rail-operator-tag {
-            display: inline-block;
-            padding: 2px 8px;
-            border-radius: 9999px; /* Full rounded corners */
-            font-size: 0.75rem;
-            font-weight: 600;
-            line-height: 1;
-        }
-        .southern { background-color: #006633; color: white; }
-        .overground { background-color: #FF7D00; color: white; }
-        .transfer-line {
-            height: 100%;
-            width: 2px;
-            background-color: #e5e7eb;
-            position: absolute;
-            left: 17px; /* Align with dots */
-            top: 0;
-            z-index: 0;
-        }
-        /* Mobile adjustment for better spacing */
-        @media (max-width: 640px) {
-            .journey-list > div {
-                margin-bottom: 1.5rem;
-            }
-        }
     </style>
 </head>
 <body class="bg-gray-100 min-h-screen p-4 sm:p-8 font-sans">
-
     <div class="max-w-4xl mx-auto">
         <header class="text-center mb-10">
-            <h1 class="text-3xl sm:text-4xl font-extrabold text-rail-blue mb-2">SRC to IMW Stitched Rail Journeys</h1>
-            <p id="status" class="text-lg text-gray-600">Loading live data...</p>
+            <h1 class="text-3xl sm:text-4xl font-extrabold text-rail-blue tracking-tight">
+                Rail Connection Finder
+            </h1>
+            <p class="text-lg text-gray-600 mt-2">Streatham Common $\rightarrow$ Imperial Wharf (via Clapham Junction)</p>
         </header>
 
-        <div id="journey-list" class="journey-list grid gap-6">
-            <!-- Journey cards will be injected here -->
+        <div id="status" class="text-center text-sm mb-6 text-gray-500">
+            Fetching live data...
+        </div>
+
+        <div id="journey-list" class="space-y-6">
+            <!-- Journeys will be rendered here -->
         </div>
     </div>
 
     <script>
-        /**
-         * Renders a single journey leg.
-         */
-        function renderLeg(leg, index) {
-            const isTransfer = leg.type === 'transfer';
-            const isLast = index === 2; // Assuming max 3 items: Leg1, Transfer, Leg2
+        // Helper function to get the appropriate color class for an operator
+        const getOperatorClass = (operator) => {
+            const op = operator.toLowerCase();
+            if (op.includes('overground') || op.includes('mildmay')) return 'bg-overground-orange text-overground-dark border-overground-dark';
+            if (op.includes('southern')) return 'bg-southern-green text-white border-southern-green';
+            return 'bg-gray-300 text-gray-800 border-gray-500';
+        };
 
-            if (isTransfer) {
-                return `
-                    <div class="relative pl-8 pt-2 pb-2">
-                        <div class="transfer-line"></div>
-                        <div class="absolute left-3 top-3.5 w-3 h-3 bg-gray-400 rounded-full z-10"></div>
-                        <p class="text-sm text-gray-500 italic ml-4">
-                            Transfer at <span class="font-semibold">${leg.location}</span>: ${leg.transferTime}
-                        </p>
-                    </div>
-                `;
-            }
-
-            // Determine colors based on operator (simple heuristic for display)
-            const operator = leg.operator || 'Southern';
-            const operatorClass = operator.toLowerCase().includes('overground') ? 'overground' : 'southern';
-            const timeKey = isLast ? 'arrival' : 'departure';
-            const stationKey = isLast ? 'destination' : 'origin';
-            const circleColor = isLast ? 'bg-green-500' : 'bg-rail-blue';
-
-            return `
-                <div class="relative pl-8 pt-1 pb-1">
-                    ${!isLast ? '<div class="transfer-line"></div>' : ''}
-                    <div class="absolute left-2.5 top-2.5 w-5 h-5 ${circleColor} rounded-full flex items-center justify-center z-10">
-                        <svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path></svg>
-                    </div>
-                    <div class="ml-4">
-                        <div class="flex justify-between items-start">
-                            <span class="text-2xl font-bold text-gray-900">${leg[timeKey]}</span>
-                            <span class="rail-operator-tag ${operatorClass}">${operator}</span>
-                        </div>
-                        <p class="text-lg text-gray-700 font-semibold">${leg[stationKey]}</p>
-                        <div class="flex items-center space-x-4 mt-1 text-sm">
-                            <p class="text-gray-600">Platform: <span class="font-bold text-lg text-rail-blue">${leg.platform || 'TBC'}</span></p>
-                            <p class="${leg.status === 'Delayed' ? 'text-red-600' : 'text-green-600'} font-semibold">${leg.status}</p>
-                        </div>
-                    </div>
-                </div>
-            `;
+        // Helper function to format the operator name
+        const formatOperatorName = (operator) => {
+             const op = operator.toLowerCase();
+             if (op.includes('mildmay')) return 'Overground';
+             return operator;
         }
 
-        /**
-         * Renders the complete journey card.
-         */
-        function renderJourneyCard(journey) {
-            const legsHtml = journey.legs.map(renderLeg).join('');
-            const statusClass = journey.status === 'Delayed' ? 'bg-red-500' : 'bg-green-500';
+        // Helper function to calculate time difference in minutes
+        const getTimeInMinutes = (timeStr) => {
+            const [hours, minutes] = timeStr.split(':').map(Number);
+            return (hours * 60) + minutes;
+        }
 
-            return `
-                <div class="card-bg rounded-xl overflow-hidden shadow-lg border border-gray-200">
-                    <div class="p-4 sm:p-6 bg-rail-blue text-white flex justify-between items-center rounded-t-xl">
-                        <div class="text-left">
-                            <h2 class="text-xl sm:text-2xl font-extrabold mb-1">
-                                ${journey.departureTime} → ${journey.arrivalTime}
-                            </h2>
-                            <p class="text-sm font-medium opacity-90">${journey.totalDuration} Total Journey Time</p>
-                        </div>
-                        <div class="text-right">
-                            <span class="px-3 py-1 rounded-full text-sm font-bold ${statusClass}">
-                                ${journey.status.toUpperCase()}
-                            </span>
-                        </div>
-                    </div>
+        const renderJourneyCard = (segment) => {
+            const firstLeg = segment.first_leg;
+            
+            // Extract the platform keys dynamically
+            const firstPlatformKey = Object.keys(firstLeg).find(key => key.startsWith('departurePlatform'));
+            const firstPlatform = firstLeg[firstPlatformKey] || 'TBC';
+
+            // Function to render the connections for the second leg
+            const renderConnections = (connections) => {
+                // Sort connections by departure time of the second leg
+                connections.sort((a, b) => getTimeInMinutes(a.second_leg.departure) - getTimeInMinutes(b.second_leg.departure));
+
+                return connections.map(conn => {
+                    const secondLeg = conn.second_leg;
                     
-                    <div class="p-4 sm:p-6 relative">
-                        ${legsHtml}
-                    </div>
-                </div>
-            `;
-        }
+                    // Simple total duration calculation (Note: assumes same day, if crossings midnight occur, logic must be more complex)
+                    const totalMinutes = getTimeInMinutes(secondLeg.arrival) - getTimeInMinutes(firstLeg.departure);
 
-        /**
-         * Fetches the live data file and renders the journeys.
-         */
-        async function fetchAndRenderJourneys() {
-            const journeyListElement = document.getElementById('journey-list');
-            const statusElement = document.getElementById('status');
+                    const operatorClass = getOperatorClass(secondLeg.operator);
+                    const formattedOperator = formatOperatorName(secondLeg.operator);
 
-            // Show loading state initially or during refresh
-            journeyListElement.innerHTML = `
-                <div class="card-bg p-8 rounded-xl text-center">
-                    <svg class="refresh-icon mx-auto h-8 w-8 text-rail-blue" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m1.584 10H5m4.5-5H9m5.5-5H14m5 5v5h.582m-1.584 10H19m4-10H20"></path>
-                    </svg>
-                    <p class="text-lg text-gray-600 mt-3">Refreshing data...</p>
-                </div>
-            `;
+                    const secondPlatformKey = Object.keys(secondLeg).find(key => key.startsWith('departurePlatform'));
+                    const secondPlatform = secondLeg[secondPlatformKey] || 'TBC';
 
-            try {
-                // Fetch the static JSON file. We append a query parameter to ensure we bypass cache.
-                const response = await fetch(`live_data.json?t=${new Date().getTime()}`);
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                
-                const data = await response.json();
-                
-                // Hide loading and render results
-                if (data.length > 0) {
-                    const renderedHtml = data.map(renderJourneyCard).join('');
-                    journeyListElement.innerHTML = renderedHtml;
-
-                    const lastUpdated = data[0].live_updated_at;
-                    statusElement.innerHTML = `Data last updated by Harvester at: <span class="font-bold text-gray-700">${lastUpdated}</span>. Showing ${data.length} Stitched Journeys.`;
-                } else {
-                    journeyListElement.innerHTML = `
-                        <div class="card-bg p-8 rounded-xl text-center">
-                            <p class="text-xl font-semibold text-gray-600">No immediate valid journeys found.</p>
-                            <p class="text-gray-500">The harvester is waiting for services with a ${MIN_TRANSFER_MINUTES}-minute transfer or more.</p>
+                    return `
+                        <div class="flex items-start p-3 bg-white rounded-lg shadow-sm mb-2 transition duration-150 hover:bg-gray-50 border-l-4 border-rail-blue">
+                            <!-- Transfer & Total Time -->
+                            <div class="flex-shrink-0 w-24 text-center border-r pr-3">
+                                <p class="text-sm font-semibold text-gray-700">Total: <span class="text-rail-blue">${totalMinutes} min</span></p>
+                                <p class="text-xs text-blue-600 font-medium mt-1">Transfer: ${conn.transferTime}</p>
+                            </div>
+                            
+                            <!-- Connection Details -->
+                            <div class="flex-grow pl-4">
+                                <div class="flex items-center justify-between text-sm font-semibold text-gray-800">
+                                    <span class="p-1 rounded text-xs text-white ${operatorClass.includes('southern') ? 'bg-southern-green' : 'bg-overground-orange'} mr-2">${formattedOperator}</span>
+                                    ${secondLeg.departure} &rarr; ${secondLeg.arrival}
+                                    <span class="text-sm font-bold ${secondLeg.status === 'On Time' ? 'text-green-600' : 'text-yellow-600'}">
+                                        ${secondLeg.status}
+                                    </span>
+                                </div>
+                                <p class="text-xs text-gray-500 mt-1">
+                                    From Clapham Jcn Platform: <span class="font-bold text-gray-800">${secondPlatform}</span>
+                                </p>
+                            </div>
                         </div>
                     `;
-                    statusElement.innerHTML = `Last check completed at: <span class="font-bold text-gray-700">${new Date().toLocaleTimeString()}</span>`;
+                }).join('');
+            };
+
+            const firstOperatorClass = getOperatorClass(firstLeg.operator);
+            const firstFormattedOperator = formatOperatorName(firstLeg.operator);
+
+            // Primary Leg Display (SCR -> CLJ)
+            return `
+                <div class="card-bg p-6 rounded-xl mb-8 border-b-8 border-rail-blue transition duration-300 ease-in-out hover:shadow-2xl">
+                    <h3 class="text-2xl font-extrabold text-rail-blue mb-4 border-b pb-2">
+                        Segment ${segment.segment_id}: <span class="text-gray-800">${firstLeg.departure} $\\rightarrow$ ${firstLeg.arrival}</span>
+                    </h3>
+                    
+                    <!-- First Leg Summary -->
+                    <div class="bg-blue-50 p-4 rounded-lg mb-4 shadow-md border-l-4 border-rail-yellow">
+                        <div class="flex justify-between items-center text-lg font-bold text-gray-800">
+                            <div class="flex items-center">
+                                <span class="p-1 rounded text-sm text-white ${firstOperatorClass.includes('southern') ? 'bg-southern-green' : 'bg-overground-orange'} font-bold mr-2">${firstFormattedOperator}</span>
+                                <span class="text-base font-medium">${firstLeg.origin.split(' ')[0]} $\\rightarrow$ ${firstLeg.destination.split(' ')[0]}</span>
+                            </div>
+                            <span class="text-sm ${firstLeg.status === 'On Time' ? 'text-green-600' : 'text-yellow-600'}">${firstLeg.status}</span>
+                        </div>
+                        <p class="text-sm text-gray-600 mt-2">
+                            Departs Streatham Common at: <span class="font-bold">${firstLeg.departure}</span> (Platform: <span class="font-bold">${firstPlatform}</span>)
+                        </p>
+                        <p class="text-sm text-gray-600">
+                            Arrives Clapham Junction at: <span class="font-bold">${firstLeg.arrival}</span>
+                        </p>
+                    </div>
+
+                    <!-- Connection List -->
+                    <h4 class="text-lg font-semibold text-gray-700 mt-6 mb-3">
+                        ${segment.connections.length} Possible Connections from Clapham Junction:
+                    </h4>
+                    <div class="space-y-2">
+                        ${renderConnections(segment.connections)}
+                    </div>
+                </div>
+            `;
+        };
+        
+        // Main function to fetch and render the new data structure
+        const fetchAndRenderJourneys = async () => {
+            const journeyListElement = document.getElementById('journey-list');
+            const statusElement = document.getElementById('status');
+            
+            journeyListElement.innerHTML = `
+                <div class="card-bg p-8 rounded-xl text-center">
+                    <span class="refresh-icon text-4xl text-rail-blue">↻</span>
+                    <p class="text-lg font-semibold text-gray-700 mt-3">Refreshing live journey connections...</p>
+                </div>
+            `;
+            statusElement.innerHTML = `Checking for updated data...`;
+
+            try {
+                // Fetch the new hierarchical JSON structure
+                const response = await fetch('live_data.json?t=' + new Date().getTime());
+                const data = await response.json();
+                
+                if (!Array.isArray(data) || data.length === 0) {
+                     journeyListElement.innerHTML = `
+                        <div class="card-bg p-8 rounded-xl text-center">
+                            <p class="text-xl font-semibold text-gray-600">No valid journey segments found.</p>
+                            <p class="text-gray-500">The script found no viable first legs with subsequent connections (min 3 min transfer).</p>
+                        </div>
+                    `;
+                    statusElement.innerHTML = `No recent data available. Waiting for next run.`;
+                    return;
                 }
+
+                // Render the results based on the segments
+                const renderedHtml = data.map(renderJourneyCard).join('');
+                journeyListElement.innerHTML = renderedHtml;
+
+                const lastUpdated = data[0].live_updated_at;
+                statusElement.innerHTML = `Data last updated by Harvester at: <span class="font-bold text-gray-700">${lastUpdated}</span>`;
                 
             } catch (error) {
                 console.error("Could not fetch data from static JSON:", error);
                 journeyListElement.innerHTML = `
                     <div class="card-bg p-8 rounded-xl text-center">
-                        <p class="text-xl font-semibold text-red-600">Failed to load live data.</p>
-                        <p class="text-gray-600">Check if your GitHub Action is running successfully.</p>
+                        <p class="text-xl font-semibold text-red-600">Failed to load live_data.json.</p>
+                        <p class="text-gray-600">Check if the data script is running successfully and creating the file.</p>
                     </div>
                 `;
+                 statusElement.innerHTML = `Error loading data.`;
             }
-        }
+        };
         
         // Initial load and set up client-side refresh (to check for new static file)
         document.addEventListener('DOMContentLoaded', fetchAndRenderJourneys);
@@ -220,3 +222,4 @@
     </script>
 </body>
 </html>
+
