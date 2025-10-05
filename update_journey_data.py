@@ -47,10 +47,11 @@ def retry_fetch(url, params, max_retries=MAX_RETRIES):
             else:
                 raise
 
-def get_segment_journeys(origin, destination):
+def get_segment_journeys(origin, destination, departure_time=None):
     """
     Fetch a list of planned journeys for a single segment using the TFL Journey Planner.
     This is used to get all viable train legs for stitching.
+    The optional departure_time forces the TFL API to search from a specific point.
     """
     url = f"{TFL_BASE_URL}/Journey/JourneyResults/{origin}/to/{destination}"
     
@@ -60,6 +61,13 @@ def get_segment_journeys(origin, destination):
         "journeyPreference": "LeastTime",
         "alternativeRoute": "true"
     }
+    
+    # If a specific departure time is provided, use it in the API call
+    if departure_time:
+        # TFL API expects time in HHMM format and date in YYYYMMDD
+        params["time"] = departure_time.strftime('%H%M')
+        params["date"] = departure_time.strftime('%Y%m%d')
+        print(f"DEBUG: Forcing API search for segment from {origin} to start at {departure_time.strftime('%H:%M')}.")
     
     if TFL_APP_ID and TFL_APP_KEY:
         params["app_id"] = TFL_APP_ID
@@ -224,15 +232,18 @@ def stitch_and_process_journeys(num_segments):
     to show all possible connections.
     """
     
-    # 1. Fetch all unique train legs from Streatham Common to Clapham Junction
+    # 1. Fetch all unique train legs from Streatham Common to Clapham Junction (searches from now)
     journeys_l1 = get_segment_journeys(ORIGIN, INTERCHANGE_STATION)
     first_legs = extract_valid_train_legs(journeys_l1, INTERCHANGE_STATION)
-    print(f"DEBUG: Found {len(first_legs)} unique legs for the first segment.") # NEW LOGGING
+    print(f"DEBUG: Found {len(first_legs)} unique legs for the first segment.")
     
     # 2. Fetch all unique train legs from Clapham Junction to Imperial Wharf
-    journeys_l2 = get_segment_journeys(INTERCHANGE_STATION, DESTINATION)
+    # To ensure we capture connections for later L1 segments (e.g., 11:20 and 11:50), 
+    # we force the search to look 90 minutes into the future to get a wider range of connecting trains.
+    future_time = datetime.now() + timedelta(minutes=90)
+    journeys_l2 = get_segment_journeys(INTERCHANGE_STATION, DESTINATION, departure_time=future_time)
     second_legs = extract_valid_train_legs(journeys_l2, DESTINATION)
-    print(f"DEBUG: Found {len(second_legs)} unique legs for the second segment.") # NEW LOGGING
+    print(f"DEBUG: Found {len(second_legs)} unique legs for the second segment.")
     
     if not first_legs or not second_legs:
         print("ERROR: Could not retrieve sufficient train legs for stitching.")
@@ -261,11 +272,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
-
-
-
-
-
