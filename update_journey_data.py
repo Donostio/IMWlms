@@ -3,12 +3,13 @@ import os
 from datetime import datetime, timedelta
 import requests
 import pytz 
-import random # Keep random import for potential future use or if mock fallback remains, but ensure it's not used in the main flow.
+import random 
+import urllib.parse # <-- New import for URL encoding
 
 # --- Configuration ---
 LIVE_DATA_FILE = 'live_data.json'
-MAX_JOURNEYS_TO_SAVE = 5 # Increased slightly to ensure we capture enough results after filtering
-MIN_TRANSFER_MINUTES = 3 # Minimum time required to change trains at Clapham Junction
+MAX_JOURNEYS_TO_SAVE = 5 
+MIN_TRANSFER_MINUTES = 3 
 TFL_BASE_URL = "https://api.tfl.gov.uk/v1"
 
 # National Rail CRS Codes used by TfL for these routes
@@ -64,7 +65,7 @@ def get_status_from_leg(leg):
     scheduled_departure = leg.get('scheduledDepartureTime')
     departure = leg.get('departureTime')
     
-    if scheduled_departure and departure and scheduled_departure != departure:
+    if scheduled_departure and departure and departure and scheduled_departure != departure:
         # Simple detection of a delay
         return 'Delayed'
     
@@ -113,17 +114,16 @@ class TflRailDataHarvester:
         else:
             self._use_mock_fallback = False
 
-    def fetch_tfl_journeys(self, origin, destination, max_journeys=8, departure_time=None):
+    def fetch_tfl_journeys(self, origin_crs, destination_crs, max_journeys=8, departure_time=None):
         """
         Fetches journey results between two CRS codes, optionally setting a 
-        specific departure time for the second leg search.
+        specific departure time for the second leg search. Uses full station names in the URL.
         """
         if self._use_mock_fallback:
-            # Simple mock fallback for safety, not the core logic
+            # Mock fallback logic remains here, unchanged for brevity
             from datetime import timedelta
             now = datetime.now(LONDON_TIMEZONE)
-            
-            # Create a mock direct journey (SRC -> IMW)
+            # ... mock setup
             direct_journey = {
                 'startDateTime': now.isoformat(), 
                 'duration': 35, 
@@ -131,7 +131,6 @@ class TflRailDataHarvester:
                     {'duration': 35, 'departureTime': (now + timedelta(minutes=10)).isoformat(), 'scheduledDepartureTime': (now + timedelta(minutes=10)).isoformat(), 'arrivalTime': (now + timedelta(minutes=45)).isoformat(), 'arrivalPoint': {'crsCode': STATION_CODES['TO'], 'commonName': STATIONS['IMW']}, 'departurePoint': {'crsCode': STATION_CODES['FROM'], 'commonName': STATIONS['SRC']}, 'instruction': {'summary': 'Southern Service'}, 'isCancelled': False}
                 ]
             }
-            # Create a mock first leg journey (SRC -> CLJ)
             first_leg_journey = {
                 'startDateTime': (now + timedelta(minutes=20)).isoformat(), 
                 'duration': 12, 
@@ -139,7 +138,6 @@ class TflRailDataHarvester:
                     {'duration': 12, 'departureTime': (now + timedelta(minutes=20)).isoformat(), 'scheduledDepartureTime': (now + timedelta(minutes=20)).isoformat(), 'arrivalTime': (now + timedelta(minutes=32)).isoformat(), 'arrivalPoint': {'crsCode': STATION_CODES['VIA'], 'commonName': STATIONS['CLJ']}, 'departurePoint': {'crsCode': STATION_CODES['FROM'], 'commonName': STATIONS['SRC']}, 'instruction': {'summary': 'London Overground'}, 'isCancelled': False},
                 ]
             }
-            # Create a mock second leg journey (CLJ -> IMW)
             second_leg_journey = {
                 'startDateTime': (now + timedelta(minutes=35)).isoformat(), 
                 'duration': 5, 
@@ -167,8 +165,16 @@ class TflRailDataHarvester:
             params['time'] = departure_time
         else:
             params['time'] = now_london.strftime('%H%M')
+
+        # --- Use full station names, URL encoded, for the API path ---
+        origin_name = STATIONS.get(origin_crs, origin_crs)
+        destination_name = STATIONS.get(destination_crs, destination_crs)
         
-        url = f"{TFL_BASE_URL}/Journey/JourneyResults/{origin}/to/{destination}"
+        encoded_origin = urllib.parse.quote(origin_name)
+        encoded_destination = urllib.parse.quote(destination_name)
+        
+        url = f"{TFL_BASE_URL}/Journey/JourneyResults/{encoded_origin}/to/{encoded_destination}"
+        # -----------------------------------------------------------------
         
         try:
             response = requests.get(url, params=params, timeout=10)
@@ -178,7 +184,7 @@ class TflRailDataHarvester:
             return data
             
         except requests.exceptions.RequestException as e:
-            print(f"ERROR: Failed to fetch data from TfL API ({origin} to {destination}): {e}")
+            print(f"ERROR: Failed to fetch data from TfL API ({origin_crs} to {destination_crs}): {e}")
             return None
 
     def run_two_leg_search(self):
@@ -207,21 +213,18 @@ class TflRailDataHarvester:
                     })
                     self.segment_id_counter += 1
                     if len(self.journeys) >= MAX_JOURNEYS_TO_SAVE:
-                        return # Stop if we hit the max limit
+                        return 
 
         # 2. Fetch all potential first legs: SRC -> CLJ
-        # We search a bit further out to ensure enough first legs are captured before filtering
         first_leg_data = self.fetch_tfl_journeys(STATION_CODES['FROM'], STATION_CODES['VIA'], max_journeys=10)
         
         if not first_leg_data or not first_leg_data.get('journeys'):
-            return # No first legs found
+            return 
 
         # 3. Fetch all potential second legs: CLJ -> IMW (Departure board style)
-        # We use the current time as the departure time to get upcoming services
         second_leg_data = self.fetch_tfl_journeys(STATION_CODES['VIA'], STATION_CODES['TO'], max_journeys=15)
         
         if not second_leg_data or not second_leg_data.get('journeys'):
-            # This is normal if no connections are running soon
             return 
             
         # Extract and format second leg options for easy lookup/stitching
@@ -254,7 +257,6 @@ class TflRailDataHarvester:
 
             # Get the arrival time at CLJ as a datetime object
             clj_arrival_time_str = first_leg['arrival']
-            # We assume arrival is today (or tomorrow if time wraps, handled in utility)
             clj_arrival_dt = parse_time_to_dt(clj_arrival_time_str, self.london_now)
             if not clj_arrival_dt: continue
 
@@ -269,7 +271,7 @@ class TflRailDataHarvester:
 
                 if not clj_departure_dt: continue
 
-                # Adjust for midnight crossing (if CLJ departure is before CLJ arrival, assume it's the next day)
+                # Adjust for midnight crossing 
                 if clj_departure_dt < clj_arrival_dt:
                     clj_departure_dt += timedelta(days=1)
                 
@@ -297,7 +299,7 @@ class TflRailDataHarvester:
                 dep_dt_full = parse_time_to_dt(first_leg['departure'], self.london_now)
                 arr_dt_full = parse_time_to_dt(final_arrival_time_str, self.london_now)
                 
-                # Adjust total arrival for midnight crossing (assume it's the next day if arrival is earlier than departure)
+                # Adjust total arrival for midnight crossing
                 if arr_dt_full < dep_dt_full:
                     arr_dt_full += timedelta(days=1)
                 
@@ -339,4 +341,4 @@ if __name__ == '__main__':
         import pytz 
         save_rail_data()
     except (ImportError, NameError) as e:
-        print(f"FATAL ERROR: Failed to run live data script. Missing library: {e}. Please ensure 'requests' and 'pytz' are installed.")
+        print(f"FATAL ERROR: Failed to run live data script. Missing library: {e}. Please ensure 'requests' and 'pytz' are installed by running 'pip install -r requirements.txt'")
