@@ -114,16 +114,11 @@
 
             return `
                 <div class="p-3 border border-gray-700 rounded-lg bg-gray-900 space-y-2">
-                    <!-- Transfer Row -->
-                    <div class="flex justify-between items-center text-sm pb-1 border-b border-gray-800">
-                        <span class="text-lg font-bold text-yellow-400">${transferTime} transfer</span>
-                        <span class="text-xs text-gray-400">at Clapham Junction</span>
-                    </div>
-
-                    <!-- Second Leg Details (Clapham Jcn -> Imperial Wharf) -->
-                    <div class="flex justify-between text-sm items-center">
+                    
+                    <!-- Second Leg Details (Clapham Jcn -> Imperial Wharf) - Now the bold header -->
+                    <div class="flex justify-between text-sm items-center pb-1 border-b border-gray-800">
                         <div class="w-1/3 font-medium text-white">
-                            <span class="block">${secondLeg.departure} - ${secondLeg.arrival}</span>
+                            <span class="block text-lg font-bold">${secondLeg.departure} - ${secondLeg.arrival}</span>
                             <span class="text-xs text-gray-500 block">${secondLegDuration} mins</span>
                         </div>
                         <div class="w-1/3 text-center text-gray-400 text-xs font-medium">
@@ -133,6 +128,12 @@
                             <span class="font-semibold text-white block">P: ${claphamPlatform}</span>
                             <span class="text-xs ${operatorColor}">${secondLeg.operator}</span>
                         </div>
+                    </div>
+
+                    <!-- Transfer Row (Now below time details) -->
+                    <div class="flex justify-between items-center text-sm">
+                        <span class="font-semibold text-yellow-400">${transferTime} transfer</span>
+                        <span class="text-xs text-gray-400">at Clapham Junction</span>
                     </div>
 
                     <!-- Total Duration Display -->
@@ -176,6 +177,10 @@
             
             // Determine the destination text based on journey type
             const destinationText = isDirect ? 'Imperial Wharf' : 'Clapham Jcn';
+            
+            // New label based on user request
+            const firstLegLabel = isDirect ? 'DIRECT' : 'To Clapham Junct only';
+
 
             return `
                 <div class="card-bg p-4 sm:p-6 rounded-xl border border-gray-800 space-y-3">
@@ -184,7 +189,7 @@
                     <div class="flex justify-between items-center pb-2">
                         <div class="flex items-baseline space-x-3">
                             <h3 class="text-3xl font-extrabold text-white">
-                                ${firstLeg.departure} $\rightarrow$ ${firstLeg.arrival}
+                                ${firstLeg.departure} - ${firstLeg.arrival}
                             </h3>
                             <span class="text-base font-medium text-gray-400">(${firstLegDuration} mins)</span>
                         </div>
@@ -197,7 +202,8 @@
                     <div class="space-y-2 border-b border-gray-700 pb-3">
                         <div class="flex justify-between text-sm items-center p-2 rounded bg-gray-900">
                             <div class="font-medium text-white">
-                                <span class="block text-base">${isDirect ? 'DIRECT' : 'FIRST LEG'} to ${destinationText}</span>
+                                <span class="block text-base font-bold">${firstLegLabel}</span>
+                                <span class="block text-xs text-gray-400">${journey.type} Journey</span>
                             </div>
                             <div class="text-right">
                                 <span class="block text-xs text-gray-400">Platform: <span class="font-semibold text-white">${streathamPlatform}</span></span>
