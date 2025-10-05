@@ -180,37 +180,34 @@
             return `
                 <div class="card-bg p-4 sm:p-6 rounded-xl border border-gray-800 space-y-3">
                     
-                    <!-- Main Header Row: Departure Time and Status -->
+                    <!-- Main Header Row: Departure/Arrival Time, Duration, and Status -->
                     <div class="flex justify-between items-center pb-2">
-                        <h3 class="text-3xl font-extrabold text-white">
-                            ${firstLeg.departure}
-                        </h3>
+                        <div class="flex items-baseline space-x-3">
+                            <h3 class="text-3xl font-extrabold text-white">
+                                ${firstLeg.departure} $\rightarrow$ ${firstLeg.arrival}
+                            </h3>
+                            <span class="text-base font-medium text-gray-400">(${firstLegDuration} mins)</span>
+                        </div>
                         <span class="text-sm font-semibold p-1 px-2 rounded ${journey.status === 'On Time' ? 'bg-green-600' : 'bg-red-600'} text-white">
                             ${journey.status}
                         </span>
                     </div>
                     
-                    <!-- LEG 1 / DIRECT HEADER -->
-                    <div class="space-y-3 border-b border-gray-700 pb-3">
-                        <h4 class="text-lg font-semibold text-white">${isDirect ? 'DIRECT' : 'FIRST LEG'} (Streatham Common $\rightarrow$ ${destinationText})</h4>
-                        
-                        <!-- Leg 1 Details -->
-                        <div class="flex justify-between text-sm items-center">
-                            <div class="w-1/3 font-medium text-white">
-                                <span class="block">${firstLeg.departure} - ${firstLeg.arrival}</span>
-                                <span class="text-xs text-gray-500 block">${firstLegDuration} mins</span>
+                    <!-- LEG 1 / DIRECT INFO (Simplified) -->
+                    <div class="space-y-2 border-b border-gray-700 pb-3">
+                        <div class="flex justify-between text-sm items-center p-2 rounded bg-gray-900">
+                            <div class="font-medium text-white">
+                                <span class="block text-base">${isDirect ? 'DIRECT' : 'FIRST LEG'} to ${destinationText}</span>
                             </div>
-                            <div class="w-1/3 text-center text-gray-400 text-xs font-medium">
-                                Platform: <span class="font-semibold text-white">${streathamPlatform}</span>
-                            </div>
-                            <div class="w-1/3 text-right">
-                                <span class="text-xs ${operatorColor}">${firstLeg.operator}</span>
+                            <div class="text-right">
+                                <span class="block text-xs text-gray-400">Platform: <span class="font-semibold text-white">${streathamPlatform}</span></span>
+                                <span class="block text-xs ${operatorColor} font-semibold">${firstLeg.operator}</span>
                             </div>
                         </div>
-                        
+
                         ${isDirect ? `
                             <div class="text-center pt-2">
-                                <p class="text-lg font-bold text-green-400">Total Duration: ${journey.totalDuration}</p>
+                                <p class="text-lg font-bold text-green-400">Total Journey: ${journey.totalDuration}</p>
                             </div>
                         ` : ''}
                     </div>
