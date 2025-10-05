@@ -4,6 +4,7 @@
             "origin": "Streatham Common Rail Station",
             "destination": "Clapham Junction Rail Station",
             "departure": "10:20",
+            "scheduled_departure": "10:20",
             "arrival": "10:31",
             "departurePlatform_Streatham": "TBC",
             "operator": "N/A",
@@ -24,6 +25,6 @@
             }
         ],
         "segment_id": 1,
-        "live_updated_at": "08:54:45"
+        "live_updated_at": "09:02:46"
     }
 ]
