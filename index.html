@@ -190,13 +190,6 @@
                 connectionsHtml = connectionsToDisplay.map(conn => renderConnectionDetails(conn, journey)).join('');
             }
             
-            // Determine the destination text based on journey type
-            const destinationText = isDirect ? 'Imperial Wharf' : 'Clapham Jcn';
-            
-            // New label based on user request (no longer used as header label is removed)
-            const firstLegLabel = isDirect ? 'DIRECT' : 'To Clapham Junct only';
-
-
             return `
                 <div class="card-bg p-4 sm:p-6 rounded-xl border border-gray-800 space-y-3">
                     
@@ -209,7 +202,11 @@
                                 <h3 class="text-3xl font-extrabold text-white">
                                     ${firstLeg.departure} - ${firstLeg.arrival}
                                 </h3>
-                                ${!isDirect ? `<span class="text-base font-bold text-rail-blue">CHANGE AT CLJ</span>` : ''}
+                                <!-- UPDATED: Added DIRECT for Direct journeys and changed CHANGE AT CLJ text -->
+                                ${isDirect 
+                                    ? `<span class="text-base font-bold text-rail-blue">DIRECT</span>` 
+                                    : `<span class="text-base font-bold text-rail-blue">To CLJ ONLY!</span>`
+                                }
                             </div>
                             
                             <div class="text-right">
@@ -222,17 +219,14 @@
                             </div>
                         </div>
 
-                        <!-- Row 2: Duration, Operator, and Direct Journey Total Time -->
+                        <!-- Row 2: Duration and Operator (Removed Total Journey/Direct Text) -->
                         <div class="flex justify-between items-center text-sm">
                             <div class="flex items-baseline space-x-3 text-gray-400">
                                 <span class="text-base font-medium">(${firstLegDuration} mins)</span>
                                 <span class="block text-xs ${operatorColor} font-semibold">${operatorDisplay}</span>
-                                ${isDirect ? `<span class="block text-xs text-gray-400">${journey.type} Journey</span>` : ''}
+                                <!-- Direct Journey and Total Duration text removed here -->
                             </div>
-                            
-                            ${isDirect ? `
-                                <p class="font-bold text-sm text-green-400">Total Journey: ${journey.totalDuration}</p>
-                            ` : ''}
+                            <div></div>
                         </div>
                     </div>
 
@@ -240,8 +234,8 @@
                     <!-- CONNECTIONS LIST (for One Change journeys only) -->
                     ${!isDirect && journey.connections && journey.connections.length > 0 ? `
                         <div class="space-y-4">
-                            <!-- Display the actual count of connections being shown (max 2) -->
-                            <p class="text-base font-semibold text-yellow-400">Next ${connectionCountDisplay} Connection${connectionCountDisplay !== 1 ? 's' : ''} via Clapham Junction:</p>
+                            <!-- UPDATED: Removed "via Clapham Junction" -->
+                            <p class="text-base font-semibold text-yellow-400">Next ${connectionCountDisplay} Connection${connectionCountDisplay !== 1 ? 's' : ''}:</p>
                             ${connectionsHtml}
                         </div>
                     ` : ''}
