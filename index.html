@@ -90,12 +90,67 @@
             return diffMins;
         };
 
-        // --- Helper Function to render ONE complete journey option (Leg 1 + Transfer + Leg 2) ---
-        const renderOneChangeOption = (journey, conn) => {
-            const firstLeg = journey.first_leg;
+        // --- Helper Function to render connection details within a main card ---
+        const renderConnectionDetails = (conn, journey) => {
             const secondLeg = conn.second_leg;
             const transferTime = conn.transferTime;
-            const totalDurationToDisplay = journey.totalDuration; // Placeholder until data script update
+            const totalDurationToDisplay = journey.totalDuration; 
+            
+            // Get Platform for Clapham Jcn
+            const claphamPlatformKey = Object.keys(secondLeg).find(key => key.startsWith('departurePlatform_Clapham'));
+            const claphamPlatform = secondLeg[claphamPlatformKey] || 'TBC';
+            
+            // Calculate leg duration
+            const secondLegDuration = calculateDuration(secondLeg.departure, secondLeg.arrival);
+
+            // Second Leg Operator Color
+            const operatorId = secondLeg.operator;
+            let operatorColor = 'text-gray-400';
+            if (operatorId && operatorId.toLowerCase().includes('southern')) {
+                operatorColor = 'text-southern-green';
+            } else if (operatorId && operatorId.toLowerCase().includes('overground')) {
+                operatorColor = 'text-overground-orange';
+            }
+
+            return `
+                <div class="p-3 border border-gray-700 rounded-lg bg-gray-900 space-y-2">
+                    <!-- Transfer Row -->
+                    <div class="flex justify-between items-center text-sm pb-1 border-b border-gray-800">
+                        <span class="text-lg font-bold text-yellow-400">${transferTime} transfer</span>
+                        <span class="text-xs text-gray-400">at Clapham Junction</span>
+                    </div>
+
+                    <!-- Second Leg Details (Clapham Jcn -> Imperial Wharf) -->
+                    <div class="flex justify-between text-sm items-center">
+                        <div class="w-1/3 font-medium text-white">
+                            <span class="block">${secondLeg.departure} - ${secondLeg.arrival}</span>
+                            <span class="text-xs text-gray-500 block">${secondLegDuration} mins</span>
+                        </div>
+                        <div class="w-1/3 text-center text-gray-400 text-xs font-medium">
+                            Clapham Jcn $\rightarrow$ Imperial Wharf
+                        </div>
+                        <div class="w-1/3 text-right">
+                            <span class="font-semibold text-white block">P: ${claphamPlatform}</span>
+                            <span class="text-xs ${operatorColor}">${secondLeg.operator}</span>
+                        </div>
+                    </div>
+
+                    <!-- Total Duration Display -->
+                    <div class="flex justify-end pt-1 border-t border-gray-800">
+                        <p class="font-bold text-sm text-green-400">Total Journey: ${totalDurationToDisplay}</p>
+                    </div>
+                </div>
+            `;
+        };
+        
+        // --- Main Card Renderer ---
+        const renderJourneyCard = (journey) => {
+            // Check if first_leg exists, otherwise default to the first leg in the 'legs' array (standard TFL structure)
+            const firstLeg = journey.first_leg || (journey.legs && journey.legs.length > 0 ? journey.legs[0] : null);
+            
+            if (!firstLeg) return ''; // Skip rendering if no first leg data is found
+
+            const isDirect = journey.type === 'Direct';
             
             // First Leg Operator Color
             const operatorId = firstLeg.operator;
@@ -109,140 +164,67 @@
             // Get Platforms
             const streathamPlatformKey = Object.keys(firstLeg).find(key => key.startsWith('departurePlatform_Streatham'));
             const streathamPlatform = firstLeg[streathamPlatformKey] || 'TBC';
-            const claphamPlatformKey = Object.keys(secondLeg).find(key => key.startsWith('departurePlatform_Clapham'));
-            const claphamPlatform = secondLeg[claphamPlatformKey] || 'TBC';
             
-            // Calculate leg durations
+            // Calculate leg duration
             const firstLegDuration = calculateDuration(firstLeg.departure, firstLeg.arrival);
-            const secondLegDuration = calculateDuration(secondLeg.departure, secondLeg.arrival);
+
+            let connectionsHtml = '';
+            if (!isDirect && journey.connections) {
+                // Generate all connection details for One Change journeys
+                connectionsHtml = journey.connections.map(conn => renderConnectionDetails(conn, journey)).join('');
+            }
             
+            // Determine the destination text based on journey type
+            const destinationText = isDirect ? 'Imperial Wharf' : 'Clapham Jcn';
+
             return `
                 <div class="card-bg p-4 sm:p-6 rounded-xl border border-gray-800 space-y-3">
                     
-                    <!-- Main Header Row: Departure Time and Total Duration -->
-                    <div class="flex justify-between items-center pb-2 border-b border-gray-700">
+                    <!-- Main Header Row: Departure Time and Status -->
+                    <div class="flex justify-between items-center pb-2">
                         <h3 class="text-3xl font-extrabold text-white">
                             ${firstLeg.departure}
                         </h3>
-                        <p class="text-lg font-semibold text-green-400">Total: ${totalDurationToDisplay}</p>
+                        <span class="text-sm font-semibold p-1 px-2 rounded ${journey.status === 'On Time' ? 'bg-green-600' : 'bg-red-600'} text-white">
+                            ${journey.status}
+                        </span>
                     </div>
-
-                    <!-- Journey Steps (Mimicking the 3-row flat structure from the image) -->
-                    <div class="space-y-3">
+                    
+                    <!-- LEG 1 / DIRECT HEADER -->
+                    <div class="space-y-3 border-b border-gray-700 pb-3">
+                        <h4 class="text-lg font-semibold text-white">${isDirect ? 'DIRECT' : 'FIRST LEG'} (Streatham Common $\rightarrow$ ${destinationText})</h4>
                         
-                        <!-- 1. First Leg (SC -> CJ) -->
+                        <!-- Leg 1 Details -->
                         <div class="flex justify-between text-sm items-center">
                             <div class="w-1/3 font-medium text-white">
                                 <span class="block">${firstLeg.departure} - ${firstLeg.arrival}</span>
                                 <span class="text-xs text-gray-500 block">${firstLegDuration} mins</span>
                             </div>
                             <div class="w-1/3 text-center text-gray-400 text-xs font-medium">
-                                Streatham Common $\rightarrow$ Clapham Jcn
+                                Platform: <span class="font-semibold text-white">${streathamPlatform}</span>
                             </div>
                             <div class="w-1/3 text-right">
-                                <span class="font-semibold text-white block">P: ${streathamPlatform}</span>
                                 <span class="text-xs ${operatorColor}">${firstLeg.operator}</span>
                             </div>
                         </div>
-
-                        <!-- 2. Transfer Row (Bigger and bolder, with yellow accent) -->
-                        <div class="flex justify-between text-sm items-center py-1 border-y border-gray-800 bg-gray-900 rounded-md px-2">
-                            <span class="text-xl font-black text-yellow-400">${transferTime} transfer</span>
-                            <span class="text-xs text-gray-400">at Clapham Junction</span>
-                        </div>
-
-                        <!-- 3. Second Leg (CJ -> IW) -->
-                        <div class="flex justify-between text-sm items-center">
-                            <div class="w-1/3 font-medium text-white">
-                                <span class="block">${secondLeg.departure} - ${secondLeg.arrival}</span>
-                                <span class="text-xs text-gray-500 block">${secondLegDuration} mins</span>
+                        
+                        ${isDirect ? `
+                            <div class="text-center pt-2">
+                                <p class="text-lg font-bold text-green-400">Total Duration: ${journey.totalDuration}</p>
                             </div>
-                            <div class="w-1/3 text-center text-gray-400 text-xs font-medium">
-                                Clapham Jcn $\rightarrow$ Imperial Wharf
-                            </div>
-                            <div class="w-1/3 text-right">
-                                <span class="font-semibold text-white block">P: ${claphamPlatform}</span>
-                                <span class="text-xs ${operatorColor}">${secondLeg.operator}</span>
-                            </div>
-                        </div>
+                        ` : ''}
                     </div>
-                    
-                    <!-- Footer Status -->
-                    <div class="pt-2 border-t border-gray-700 text-right">
-                        <span class="text-sm font-semibold p-1 px-2 rounded ${journey.status === 'On Time' ? 'bg-green-600' : 'bg-red-600'} text-white">
-                            ${journey.status}
-                        </span>
-                    </div>
+
+                    <!-- CONNECTIONS LIST (for One Change journeys only) -->
+                    ${!isDirect && journey.connections ? `
+                        <div class="space-y-4">
+                            <p class="text-base font-semibold text-yellow-400">${journey.connections.length} Connection${journey.connections.length > 1 ? 's' : ''} via Clapham Junction:</p>
+                            ${connectionsHtml}
+                        </div>
+                    ` : ''}
+
                 </div>
             `;
-        };
-
-        
-        // --- Main Card Renderer ---
-        const renderJourneyCard = (journey) => {
-            if (journey.type === 'Direct') {
-                // If it's a direct journey, render a simple single card.
-                const firstLeg = journey.first_leg;
-                const operatorId = firstLeg.operator;
-                let operatorColor = 'text-gray-400';
-                if (operatorId && operatorId.toLowerCase().includes('southern')) {
-                    operatorColor = 'text-southern-green';
-                } else if (operatorId && operatorId.toLowerCase().includes('overground')) {
-                    operatorColor = 'text-overground-orange';
-                }
-                const streathamPlatformKey = Object.keys(firstLeg).find(key => key.startsWith('departurePlatform_Streatham'));
-                const streathamPlatform = firstLeg[streathamPlatformKey] || 'TBC';
-                const duration = calculateDuration(firstLeg.departure, firstLeg.arrival);
-
-                return `
-                    <div class="card-bg p-4 sm:p-6 rounded-xl border border-gray-800 space-y-3">
-                        
-                        <!-- Main Header Row -->
-                        <div class="flex justify-between items-center pb-2 border-b border-gray-700">
-                            <h3 class="text-3xl font-extrabold text-white">
-                                ${firstLeg.departure}
-                            </h3>
-                            <p class="text-lg font-semibold text-green-400">Total: ${journey.totalDuration}</p>
-                        </div>
-
-                        <!-- Journey Details -->
-                        <div class="space-y-3">
-                            <div class="flex justify-between text-sm items-center py-2 bg-gray-900 rounded-md px-2">
-                                <div class="w-1/3 font-medium text-white">
-                                    <span class="block">${firstLeg.departure} - ${firstLeg.arrival}</span>
-                                    <span class="text-xs text-gray-500 block">${duration} mins</span>
-                                </div>
-                                <div class="w-1/3 text-center text-green-500 font-bold">
-                                    DIRECT TRAIN
-                                </div>
-                                <div class="w-1/3 text-right">
-                                    <span class="font-semibold text-white block">P: ${streathamPlatform}</span>
-                                    <span class="text-xs ${operatorColor}">${firstLeg.operator}</span>
-                                </div>
-                            </div>
-                            <div class="text-center text-xs text-gray-500">
-                                Streatham Common $\rightarrow$ Imperial Wharf (No changes)
-                            </div>
-                        </div>
-                        
-                        <!-- Footer Status -->
-                        <div class="pt-2 border-t border-gray-700 text-right">
-                            <span class="text-sm font-semibold p-1 px-2 rounded ${journey.status === 'On Time' ? 'bg-green-600' : 'bg-red-600'} text-white">
-                                ${journey.status}
-                            </span>
-                        </div>
-                    </div>
-                `;
-            }
-
-            // If it's a One Change Journey, generate a card for *each* connection option
-            let connectionsHtml = '';
-            if (journey.connections) {
-                journey.connections.forEach(conn => {
-                    connectionsHtml += renderOneChangeOption(journey, conn);
-                });
-            }
-            return connectionsHtml;
         };
 
 
