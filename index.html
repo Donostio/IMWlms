@@ -3,18 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Next Rail Connections (SCR → IW)</title>
+    <title>Next Four Rail Journeys</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
             theme: {
                 extend: {
                     colors: {
-                        'rail-blue': '#003366',
-                        'rail-yellow': '#FFCC00',
-                        'southern-green': '#006633',
-                        'overground-orange': '#FF7D00',
-                        'overground-dark': '#B24E00',
+                        // Custom colors for status/accents in dark mode
+                        'rail-blue': '#4d94ff',
+                        'southern-green': '#00b359',
+                        'overground-orange': '#ffaa00',
                     },
                     fontFamily: {
                         sans: ['Inter', 'sans-serif'],
@@ -25,9 +24,11 @@
     </script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
+        
+        /* Dark mode card styling */
         .card-bg {
-            background: #ffffff;
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            background: #1f2937; /* Dark Gray 800 for card background */
+            box-shadow: 0 10px 15px -3px rgba(255, 255, 255, 0.1), 0 4px 6px -2px rgba(255, 255, 255, 0.05);
         }
         .refresh-icon {
             animation: spin 1s linear infinite;
@@ -37,218 +38,193 @@
             from { transform: rotate(0deg); }
             to { transform: rotate(360deg); }
         }
+        
+        /* Ensure responsive font sizes for mobile */
+        h2 { font-size: 1.5rem; } /* sm:text-2xl */
+        @media (min-width: 640px) {
+            h2 { font-size: 1.75rem; }
+        }
     </style>
 </head>
-<body class="bg-gray-100 min-h-screen p-4 sm:p-8 font-sans">
-    <div class="max-w-4xl mx-auto">
-        <header class="text-center mb-10">
-            <h1 class="text-3xl sm:text-4xl font-extrabold text-rail-blue tracking-tight">
-                Rail Connection Finder
-            </h1>
-            <p class="text-lg text-gray-600 mt-2">Streatham Common $\rightarrow$ Imperial Wharf (via Clapham Junction)</p>
+<body class="bg-black text-white p-4 sm:p-8 font-sans min-h-screen">
+    <div class="max-w-4xl mx-auto space-y-8">
+        
+        <!-- Header (Only includes a friendly message for context) -->
+        <header class="text-center pb-4 border-b border-gray-800">
+            <h1 class="text-4xl font-extrabold text-white">Live Rail Journey Segments</h1>
         </header>
 
-        <div id="status" class="text-center text-sm mb-6 text-gray-500">
-            Fetching live data...
-        </div>
-
+        <!-- Journey List -->
         <div id="journey-list" class="space-y-6">
             <!-- Journeys will be rendered here -->
+            <div class="text-center p-8 text-gray-400">Loading live data...</div>
         </div>
+        
+        <!-- Status moved to the bottom -->
+        <div id="status-message" class="text-center pt-4 text-gray-400">
+            <!-- Data last updated... will go here -->
+        </div>
+
     </div>
 
-    <script>
-        // Helper function to get the appropriate color class for an operator
-        const getOperatorClass = (operator) => {
-            const op = operator.toLowerCase();
-            if (op.includes('overground') || op.includes('mildmay')) return 'bg-overground-orange text-overground-dark border-overground-dark';
-            if (op.includes('southern')) return 'bg-southern-green text-white border-southern-green';
-            return 'bg-gray-300 text-gray-800 border-gray-500';
-        };
-
-        // Helper function to format the operator name
-        const formatOperatorName = (operator) => {
-             const op = operator.toLowerCase();
-             if (op.includes('mildmay')) return 'Overground';
-             return operator;
-        }
-
-        // Helper function to calculate time difference in minutes
-        const getTimeInMinutes = (timeStr) => {
-            const [hours, minutes] = timeStr.split(':').map(Number);
-            return (hours * 60) + minutes;
-        }
-
-        /**
-         * Formats the departure time, highlighting delays if the scheduled time differs from the expected time.
-         * @param {object} leg - The first_leg data object.
-         * @param {boolean} isTitle - Adjusts font size for the card title display.
-         * @returns {string} HTML for the formatted time.
-         */
-        const formatDepartureTime = (leg, isTitle = false) => {
-            const scheduledTime = leg.scheduled_departure;
-            const expectedDeparture = leg.departure;
-
-            let expectedClass = isTitle ? 'font-extrabold' : 'font-bold';
-            let scheduledClass = isTitle ? 'text-sm' : 'text-xs';
-
-            if (scheduledTime && scheduledTime !== expectedDeparture) {
-                // Delayed: Display expected time (bold, red) followed by scheduled time (bracketed, grey)
-                return `
-                    <span class="text-red-600 ${expectedClass}">${expectedDeparture}</span>
-                    <span class="${scheduledClass} text-gray-500 font-normal ml-1">(${scheduledTime})</span>
-                `;
-            }
-            // On Time: Display expected time (bold/extrabold)
-            return `<span class="text-gray-800 ${expectedClass}">${expectedDeparture}</span>`;
-        };
-
-
-        const renderJourneyCard = (segment) => {
-            const firstLeg = segment.first_leg;
+    <script type="text/javascript">
+        
+        // --- Helper Function for Connections ---
+        const renderConnection = (conn, isFirst, totalDuration) => {
+            const secondLeg = conn.second_leg;
+            const transferTime = conn.transferTime; // e.g., "13 min"
             
-            // Extract the platform keys dynamically
-            const firstPlatformKey = Object.keys(firstLeg).find(key => key.startsWith('departurePlatform'));
-            const firstPlatform = firstLeg[firstPlatformKey] || 'TBC';
-
-            // Formatted departure time for the card title (larger font)
-            const titleDepartureHtml = formatDepartureTime(firstLeg, true);
-            // Formatted departure time for the body text (normal font)
-            const bodyDepartureHtml = formatDepartureTime(firstLeg, false);
-
-            // Function to render the connections for the second leg
-            const renderConnections = (connections) => {
-                // Sort connections by departure time of the second leg
-                connections.sort((a, b) => getTimeInMinutes(a.second_leg.departure) - getTimeInMinutes(b.second_leg.departure));
-
-                return connections.map(conn => {
-                    const secondLeg = conn.second_leg;
-                    
-                    // Simple total duration calculation (Note: assumes same day, if crossings midnight occur, logic must be more complex)
-                    // If arrival is earlier than departure (e.g., 00:05 arrival, 23:55 departure), add 24 hours to arrival time for correct duration calculation.
-                    let totalMinutes = getTimeInMinutes(secondLeg.arrival) - getTimeInMinutes(firstLeg.departure);
-                    if (totalMinutes < 0) {
-                        totalMinutes += 1440; // Add 24 hours (1440 minutes)
-                    }
-
-
-                    const operatorClass = getOperatorClass(secondLeg.operator);
-                    const formattedOperator = formatOperatorName(secondLeg.operator);
-
-                    const secondPlatformKey = Object.keys(secondLeg).find(key => key.startsWith('departurePlatform'));
-                    const secondPlatform = secondLeg[secondPlatformKey] || 'TBC';
-
-                    return `
-                        <div class="flex items-start p-3 bg-white rounded-lg shadow-sm mb-2 transition duration-150 hover:bg-gray-50 border-l-4 border-rail-blue">
-                            <!-- Transfer & Total Time -->
-                            <div class="flex-shrink-0 w-24 text-center border-r pr-3">
-                                <p class="text-sm font-semibold text-gray-700">Total: <span class="text-rail-blue">${totalMinutes} min</span></p>
-                                <p class="text-xs text-blue-600 font-medium mt-1">Transfer: ${conn.transferTime}</p>
-                            </div>
-                            
-                            <!-- Connection Details -->
-                            <div class="flex-grow pl-4">
-                                <div class="flex items-center justify-between text-sm font-semibold text-gray-800">
-                                    <span class="p-1 rounded text-xs text-white ${operatorClass.includes('southern') ? 'bg-southern-green' : 'bg-overground-orange'} mr-2">${formattedOperator}</span>
-                                    ${secondLeg.departure} &rarr; ${secondLeg.arrival}
-                                    <span class="text-sm font-bold ${secondLeg.status === 'On Time' ? 'text-green-600' : 'text-yellow-600'}">
-                                        ${secondLeg.status}
-                                    </span>
-                                </div>
-                                <p class="text-xs text-gray-500 mt-1">
-                                    From Clapham Jcn Platform: <span class="font-bold text-gray-800">${secondPlatform}</span>
-                                </p>
-                            </div>
-                        </div>
-                    `;
-                }).join('');
-            };
-
-            const firstOperatorClass = getOperatorClass(firstLeg.operator);
-            const firstFormattedOperator = formatOperatorName(firstLeg.operator);
-
-            // Primary Leg Display (SCR -> CLJ)
+            // Dynamically find the platform key for the second leg (Clapham Junction)
+            const claphamPlatformKey = Object.keys(secondLeg).find(key => key.startsWith('departurePlatform_Clapham'));
+            const platformDisplay = secondLeg[claphamPlatformKey] || 'TBC';
+            
             return `
-                <div class="card-bg p-6 rounded-xl mb-8 border-b-8 border-rail-blue transition duration-300 ease-in-out hover:shadow-2xl">
-                    <h3 class="text-2xl font-extrabold text-rail-blue mb-4 border-b pb-2">
-                        Segment ${segment.segment_id}: ${titleDepartureHtml} $\\rightarrow$ ${firstLeg.arrival}
-                    </h3>
+                <div class="p-4 rounded-lg border border-gray-700 bg-gray-900 shadow-md">
                     
-                    <!-- First Leg Summary -->
-                    <div class="bg-blue-50 p-4 rounded-lg mb-4 shadow-md border-l-4 border-rail-yellow">
-                        <div class="flex justify-between items-center text-lg font-bold text-gray-800">
-                            <div class="flex items-center">
-                                <span class="p-1 rounded text-sm text-white ${firstOperatorClass.includes('southern') ? 'bg-southern-green' : 'bg-overground-orange'} font-bold mr-2">${firstFormattedOperator}</span>
-                                <span class="text-base font-medium">${firstLeg.origin.split(' ')[0]} $\\rightarrow$ ${firstLeg.destination.split(' ')[0]}</span>
-                            </div>
-                            <span class="text-sm ${firstLeg.status === 'On Time' ? 'text-green-600' : 'text-yellow-600'}">${firstLeg.status}</span>
-                        </div>
-                        <p class="text-sm text-gray-600 mt-2">
-                            Departs Streatham Common at: ${bodyDepartureHtml} (Platform: <span class="font-bold">${firstPlatform}</span>)
-                        </p>
-                        <p class="text-sm text-gray-600">
-                            Arrives Clapham Junction at: <span class="font-bold">${firstLeg.arrival}</span>
-                        </p>
+                    <!-- Transfer Time (Bigger, Bolder, Rewritten) -->
+                    <div class="text-center mb-3">
+                        <p class="text-3xl font-black text-yellow-400">${transferTime} transfer</p>
                     </div>
-
-                    <!-- Connection List -->
-                    <h4 class="text-lg font-semibold text-gray-700 mt-6 mb-3">
-                        ${segment.connections.length} Possible Connections from Clapham Junction:
-                    </h4>
-                    <div class="space-y-2">
-                        ${renderConnections(segment.connections)}
+                    
+                    <!-- Second Leg Details (The Connection) -->
+                    <div class="flex justify-between items-center text-lg font-medium">
+                        <p>${secondLeg.departure} <span class="text-gray-400">from Clapham Jcn</span></p>
+                        <p>${secondLeg.arrival} <span class="text-gray-400">to IW</span></p>
+                    </div>
+                    
+                    <!-- Platform & Total Duration Footer -->
+                    <div class="flex justify-between items-center text-xs text-gray-400 pt-2 mt-2 border-t border-gray-700">
+                        <p>Platform: <span class="font-semibold text-white">${platformDisplay}</span></p>
+                        <!-- Total Duration moved to bottom right of the box -->
+                        ${isFirst ? `<p class="font-bold text-sm text-green-400">Total Duration: ${totalDuration}</p>` : ''}
                     </div>
                 </div>
             `;
         };
         
-        // Main function to fetch and render the new data structure
-        const fetchAndRenderJourneys = async () => {
-            const journeyListElement = document.getElementById('journey-list');
-            const statusElement = document.getElementById('status');
+        // --- Main Card Renderer ---
+        const renderJourneyCard = (journey) => {
+            const firstLeg = journey.first_leg;
             
-            journeyListElement.innerHTML = `
-                <div class="card-bg p-8 rounded-xl text-center">
-                    <span class="refresh-icon text-4xl text-rail-blue">↻</span>
-                    <p class="text-lg font-semibold text-gray-700 mt-3">Refreshing live journey connections...</p>
+            // Determine colors based on operator (for visual flair)
+            const operatorId = firstLeg.operator;
+            let operatorColor = 'text-gray-400';
+            if (operatorId && operatorId.toLowerCase().includes('southern')) {
+                operatorColor = 'text-southern-green';
+            } else if (operatorId && operatorId.toLowerCase().includes('overground')) {
+                operatorColor = 'text-overground-orange';
+            }
+            
+            // First Leg Header: Remove "Segment X: " and use " - "
+            const timeRangeDisplay = `${firstLeg.departure} - ${firstLeg.arrival}`;
+            
+            // Dynamically find the platform key for the first leg (Streatham Common)
+            const streathamPlatformKey = Object.keys(firstLeg).find(key => key.startsWith('departurePlatform_Streatham'));
+            const streathamPlatform = firstLeg[streathamPlatformKey] || 'TBC';
+            
+            // Connections Header: Use new wording
+            const connectionCount = journey.connections ? journey.connections.length : 0;
+            const connectionHeader = connectionCount === 1 
+                ? `1 possible train to catch to Imperial Wharf`
+                : `${connectionCount} possible trains to catch to Imperial Wharf`;
+
+            // Render connections (only first one needs totalDuration if one change)
+            const connectionsHtml = journey.connections ? journey.connections.map((conn, index) => 
+                renderConnection(conn, index === 0, journey.totalDuration)
+            ).join('') : '';
+
+            return `
+                <div class="card-bg p-6 rounded-xl border border-gray-800">
+                    
+                    <!-- Main Time Range and Status -->
+                    <div class="flex justify-between items-center mb-4 pb-2 border-b border-gray-700">
+                        <h2 class="font-extrabold text-white">
+                            ${timeRangeDisplay}
+                        </h2>
+                        <span class="text-sm font-semibold p-1 rounded ${journey.status === 'On Time' ? 'bg-green-600' : 'bg-red-600'} text-white">
+                            ${journey.status}
+                        </span>
+                    </div>
+
+                    <!-- First Leg Details (The train from Streatham Common) -->
+                    <div class="space-y-2 text-sm">
+                        <div class="flex justify-between">
+                            <p class="text-gray-300">Scheduled:</p>
+                            <p class="font-semibold text-white">${firstLeg.scheduled_departure}</p>
+                        </div>
+                        <div class="flex justify-between">
+                            <p class="text-gray-300">Platform:</p>
+                            <p class="font-semibold text-white">${streathamPlatform}</p>
+                        </div>
+                        <div class="flex justify-between">
+                            <p class="text-gray-300">Operator:</p>
+                            <p class="font-semibold ${operatorColor}">${operatorId}</p>
+                        </div>
+                    </div>
+                    
+                    <!-- Connections Section (Only for One Change journeys) -->
+                    ${journey.type === 'One Change' ? `
+                        <div class="mt-6 pt-4 border-t border-gray-700">
+                            <!-- New connections header -->
+                            <p class="text-base font-semibold mb-3 text-yellow-400">${connectionHeader}</p>
+                            
+                            <div class="space-y-4">
+                                ${connectionsHtml}
+                            </div>
+                        </div>
+                    ` : `
+                        <div class="mt-6 pt-4 border-t border-gray-700">
+                            <p class="text-base font-semibold text-green-500">DIRECT Train - No Change Required</p>
+                            <p class="text-sm text-gray-400 pt-1">Total Duration: <span class="font-bold text-white">${journey.totalDuration}</span></p>
+                        </div>
+                    `}
                 </div>
             `;
-            statusElement.innerHTML = `Checking for updated data...`;
+        };
+
+
+        // --- Data Fetching and Initialization ---
+        const fetchAndRenderJourneys = async () => {
+            const journeyListElement = document.getElementById('journey-list');
+            const statusElement = document.getElementById('status-message');
+            
+            // Show loading state
+            journeyListElement.innerHTML = `<div class="text-center p-8 text-white"><span class="refresh-icon">↻</span> Loading live data...</div>`;
+            statusElement.innerHTML = `<p class="text-sm text-gray-500">Checking for updates...</p>`;
 
             try {
-                // Fetch the new hierarchical JSON structure
+                // Fetch the static JSON file
                 const response = await fetch('live_data.json?t=' + new Date().getTime());
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
                 const data = await response.json();
                 
-                if (!Array.isArray(data) || data.length === 0) {
-                     journeyListElement.innerHTML = `
-                        <div class="card-bg p-8 rounded-xl text-center">
-                            <p class="text-xl font-semibold text-gray-600">No valid journey segments found.</p>
-                            <p class="text-gray-500">The script found no viable first legs with subsequent connections (min 3 min transfer).</p>
-                        </div>
-                    `;
-                    statusElement.innerHTML = `No recent data available. Waiting for next run.`;
-                    return;
-                }
-
-                // Render the results based on the segments
+                // Hide loading and render results
                 const renderedHtml = data.map(renderJourneyCard).join('');
                 journeyListElement.innerHTML = renderedHtml;
 
-                const lastUpdated = data[0].live_updated_at;
-                statusElement.innerHTML = `Data last updated by Harvester at: <span class="font-bold text-gray-700">${lastUpdated}</span>`;
+                if (data.length > 0) {
+                    const lastUpdated = data[0].live_updated_at;
+                    // Updated to use white/gray text colors
+                    statusElement.innerHTML = `Data last updated by Harvester at: <span class="font-bold text-white">${lastUpdated}</span>`;
+                } else {
+                    statusElement.innerHTML = `No recent data available. Waiting for next run.`;
+                }
                 
             } catch (error) {
                 console.error("Could not fetch data from static JSON:", error);
+                // Updated error message to use dark mode colors
                 journeyListElement.innerHTML = `
-                    <div class="card-bg p-8 rounded-xl text-center">
-                        <p class="text-xl font-semibold text-red-600">Failed to load live_data.json.</p>
-                        <p class="text-gray-600">Check if the data script is running successfully and creating the file.</p>
+                    <div class="card-bg p-8 rounded-xl text-center border border-red-700">
+                        <p class="text-xl font-semibold text-red-400">Failed to load live_data.json.</p>
+                        <p class="text-gray-400">Check if the data script is running successfully.</p>
                     </div>
                 `;
-                 statusElement.innerHTML = `Error loading data.`;
+                statusElement.innerHTML = `Failed to connect to data source.`;
             }
-        };
+        }
         
         // Initial load and set up client-side refresh (to check for new static file)
         document.addEventListener('DOMContentLoaded', fetchAndRenderJourneys);
@@ -257,5 +233,3 @@
     </script>
 </body>
 </html>
-
-
