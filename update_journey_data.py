@@ -329,7 +329,6 @@ def get_one_change_journeys(direct_journeys):
 
     # --- UPDATED FILTERING LOGIC ---
     # Create a set of unique identifiers (RAW ISO departure time, operator ID) for all found direct trains.
-    # This identifies the services that MUST NOT be used as Leg 1 in a stitched journey.
     direct_train_ids = {
         j['unique_id'] 
         for j in direct_journeys
@@ -353,14 +352,43 @@ def get_one_change_journeys(direct_journeys):
     # --- END UPDATED FILTERING LOGIC ---
     
     # 2. Fetch all unique train legs from Clapham Junction to Imperial Wharf
-    # FIX APPLIED HERE: Remove the look-ahead to capture all future-dated connections.
-    journeys_l2 = get_segment_journeys(INTERCHANGE_STATION, DESTINATION, departure_time=None)
-    second_legs = extract_valid_train_legs(journeys_l2, DESTINATION)
-    print(f"DEBUG: Found {len(second_legs)} unique legs for the second segment.")
+    # FIX APPLIED HERE: Iteratively search to force TFL API to return more than the immediate 3-4 legs.
+    all_second_legs = []
+    current_search_time = None
+    
+    # Iterate 3 times to retrieve sufficient future legs (aiming for ~9-12 segments)
+    for i in range(3): 
+        # First iteration uses None (current time), subsequent iterations use last_found_departure + 1 min
+        journeys_l2 = get_segment_journeys(INTERCHANGE_STATION, DESTINATION, departure_time=current_search_time)
+        new_legs = extract_valid_train_legs(journeys_l2, DESTINATION)
+        
+        if not new_legs:
+            # If API returns no journeys, we're done
+            break
+
+        # Filter out duplicates and add new legs
+        new_leg_keys = set((l['departureTime'], l['arrivalTime']) for l in all_second_legs)
+        unique_new_legs = [
+            leg for leg in new_legs 
+            if (leg['departureTime'], leg['arrivalTime']) not in new_leg_keys
+        ]
+        all_second_legs.extend(unique_new_legs)
+        
+        # Find the latest departure time among all newly fetched legs
+        latest_departure = max(datetime.fromisoformat(l['departureTime']) for l in new_legs)
+        
+        # Set the next search time to 1 minute after the latest departure found
+        current_search_time = latest_departure + timedelta(minutes=1)
+        
+        print(f"DEBUG: Iteration {i+1} found {len(unique_new_legs)} new L2 legs. Next L2 search starts at {current_search_time.strftime('%H:%M')}.")
+    
+    second_legs = all_second_legs
+    print(f"DEBUG: Found {len(second_legs)} unique legs for the second segment after iteration.")
     
     if not second_legs:
         print("ERROR: Could not retrieve sufficient train legs for stitching.")
         return []
+
 
     # 3. Group and process the connections
     processed_segments = group_connections_by_first_leg(first_legs, second_legs)
