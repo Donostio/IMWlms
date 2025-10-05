@@ -133,6 +133,7 @@
 
             // Render connections 
             const connectionsHtml = journey.connections ? journey.connections.map((conn, index) => 
+                // Pass totalDuration to renderConnection for display in every box
                 renderConnection(conn, index === 0, journey.totalDuration)
             ).join('') : '';
 
@@ -236,4 +237,3 @@
     </script>
 </body>
 </html>
-
