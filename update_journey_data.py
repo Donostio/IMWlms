@@ -98,6 +98,7 @@ def extract_valid_train_legs(journeys, expected_destination):
                 
     # Use a set comprehension to filter out duplicate legs (multiple journeys might return the same train)
     unique_legs = {
+        # Use the raw ISO departure time for better uniqueness
         (leg['departureTime'], leg['arrivalTime'], leg.get('line', {}).get('id')): leg 
         for leg in valid_legs
     }.values()
@@ -117,12 +118,12 @@ def group_connections_by_first_leg(first_legs, second_legs):
     # --- DEBUGGING: Display available legs for clarity ---
     l1_departures = [datetime.fromisoformat(l['departureTime']).strftime('%H:%M') for l in sorted_first_legs]
     l2_departures = [datetime.fromisoformat(l['departureTime']).strftime('%H:%M') for l in second_legs]
-    print(f"DEBUG: L1 (Streatham Common → Clapham Junction) Departures: {', '.join(l1_departures)}")
-    print(f"DEBUG: L2 (Clapham Junction → Imperial Wharf) Departures: {', '.join(l2_departures)}")
+    print(f"DEBUG: L1 ({ORIGIN.split(' ')[0]} → {INTERCHANGE_STATION.split(' ')[0]}) Departures: {', '.join(l1_departures)}")
+    print(f"DEBUG: L2 ({INTERCHANGE_STATION.split(' ')[0]} → {DESTINATION.split(' ')[0]}) Departures: {', '.join(l2_departures)}")
     # --- END DEBUGGING ---
 
     for leg1 in sorted_first_legs:
-        # Use a unique key for the first leg
+        # CRITICAL CHANGE: Use raw ISO time for the unique key to prevent collisions
         leg1_key = (leg1['departureTime'], leg1['arrivalTime'])
         
         # --- Prepare First Leg Data Structure ---
@@ -136,8 +137,10 @@ def group_connections_by_first_leg(first_legs, second_legs):
             
             # Extract scheduled time
             scheduled_dep = leg1.get('scheduledDepartureTime')
-            scheduled_dep_str = datetime.fromisoformat(scheduled_dep).strftime('%H:%M') if scheduled_dep else dep_time_l1.strftime('%H:%M')
-            
+            # Use the scheduled time if available, otherwise fall back to the actual departure time
+            scheduled_dep_dt = datetime.fromisoformat(scheduled_dep) if scheduled_dep else dep_time_l1
+            scheduled_dep_str = scheduled_dep_dt.strftime('%H:%M')
+
             operator_id = leg1.get('operator', {}).get('id', 'N/A')
 
             first_leg_data = {
@@ -178,6 +181,7 @@ def group_connections_by_first_leg(first_legs, second_legs):
                     "origin": leg2['departurePoint']['commonName'],
                     "destination": leg2['arrivalPoint']['commonName'],
                     "departure": dep_time_l2.strftime('%H:%M'),
+                    # Scheduled departure is less critical for Leg 2 but kept for consistency if needed
                     "arrival": arr_time_l2.strftime('%H:%M'),
                     f"departurePlatform_{leg2['departurePoint']['commonName'].split(' ')[0]}": second_platform,
                     "operator": leg2.get('operator', {}).get('id', 'N/A'),
@@ -202,8 +206,13 @@ def group_connections_by_first_leg(first_legs, second_legs):
         segment['connections'].sort(key=lambda x: datetime.strptime(x['second_leg']['departure'], '%H:%M'))
         
         # Calculate total duration for the stitched journey (approximate)
-        l1_dep = datetime.strptime(segment['first_leg']['departure'], '%H:%M')
-        l2_arr = datetime.strptime(segment['connections'][0]['second_leg']['arrival'], '%H:%M')
+        l1_dep_str = segment['first_leg']['departure']
+        l2_arr_str = segment['connections'][0]['second_leg']['arrival']
+        
+        # NOTE: We can't easily calculate total duration robustly without full date awareness. 
+        # For simplicity, we assume same day unless the arrival time is before departure time.
+        l1_dep = datetime.strptime(l1_dep_str, '%H:%M')
+        l2_arr = datetime.strptime(l2_arr_str, '%H:%M')
         
         # Handle time crossing midnight for duration calculation
         if l2_arr < l1_dep:
@@ -211,17 +220,19 @@ def group_connections_by_first_leg(first_legs, second_legs):
         
         total_duration = l2_arr - l1_dep
         segment['totalDuration'] = f"{int(total_duration.total_seconds() / 60)} min"
-        segment['arrivalTime'] = segment['connections'][0]['second_leg']['arrival']
-        segment['departureTime'] = segment['first_leg']['departure']
+        segment['arrivalTime'] = l2_arr_str
+        segment['departureTime'] = l1_dep_str
         
         # Remove raw times from final output
         segment['first_leg'].pop('rawArrivalTime')
         
         # Create the unique identifier for the segment (used in main for final sorting/filtering)
-        segment['unique_id'] = (segment['first_leg']['departure'], segment['first_leg']['operator'])
+        # Re-using the raw time for this internal ID too
+        segment['unique_id'] = leg1_key
 
         for conn in segment['connections']:
-            conn['second_leg'].pop('rawDepartureTime')
+            if 'rawDepartureTime' in conn['second_leg']:
+                conn['second_leg'].pop('rawDepartureTime')
             
         final_output.append(segment)
         
@@ -249,8 +260,9 @@ def process_direct_journey(journey, leg):
     total_duration = journey.get('duration', 'N/A')
     
     operator_id = leg.get('operator', {}).get('id', 'N/A')
-    # Unique identifier for the direct train
-    unique_id = (dep_time.strftime('%H:%M'), operator_id)
+    
+    # CRITICAL CHANGE: Use the raw ISO time string for the unique ID
+    unique_id = (leg['departureTime'], operator_id)
 
     return {
         "type": "Direct", 
@@ -315,8 +327,8 @@ def get_one_change_journeys(direct_journeys):
         print("ERROR: Could not retrieve any first train legs.")
         return []
 
-    # --- NEW FILTERING LOGIC ---
-    # Create a set of unique identifiers (departure time, operator ID) for all found direct trains.
+    # --- UPDATED FILTERING LOGIC ---
+    # Create a set of unique identifiers (RAW ISO departure time, operator ID) for all found direct trains.
     # This identifies the services that MUST NOT be used as Leg 1 in a stitched journey.
     direct_train_ids = {
         j['unique_id'] 
@@ -327,18 +339,18 @@ def get_one_change_journeys(direct_journeys):
     filtered_first_legs = []
     
     for leg in first_legs:
-        # TFL returns the full train journey's operator even when segmenting a leg
-        leg_id = (datetime.fromisoformat(leg['departureTime']).strftime('%H:%M'), leg.get('operator', {}).get('id'))
+        # CRITICAL CHANGE: Use the raw ISO departure time for accurate comparison
+        leg_id = (leg['departureTime'], leg.get('operator', {}).get('id'))
         
         if leg_id in direct_train_ids:
-            print(f"DEBUG: Filtering Leg 1 {leg_id[0]} as it is a known direct service.")
+            print(f"DEBUG: Filtering Leg 1 {datetime.fromisoformat(leg_id[0]).strftime('%H:%M')} as it is a known direct service.")
             continue
             
         filtered_first_legs.append(leg)
 
     first_legs = filtered_first_legs
     print(f"DEBUG: Filtered down to {len(first_legs)} unique Leg 1s (non-direct).")
-    # --- END NEW FILTERING LOGIC ---
+    # --- END UPDATED FILTERING LOGIC ---
     
     # 2. Fetch all unique train legs from Clapham Junction to Imperial Wharf
     # Look 90 minutes into the future to ensure we capture a good range of connecting trains.
@@ -372,6 +384,7 @@ def main():
     combined_data = direct_data + stitched_data
     
     # Sort the list by the departure time of the first leg (or direct journey)
+    # Sorting is done on the formatted HH:MM time, which is adequate for display order
     sorted_data = sorted(combined_data, key=lambda x: datetime.strptime(x['first_leg']['departure'], '%H:%M'))
     
     # 4. Add IDs, Timestamps, and slice the final list
