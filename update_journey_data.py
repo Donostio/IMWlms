@@ -20,15 +20,9 @@ NUM_JOURNEYS = 4 # Target the next four best stitched segments (First Legs)
 MIN_TRANSFER_TIME_MINUTES = 3 # Minimum acceptable transfer time
 MAX_RETRIES = 3 # Max retries for API calls
 
-# Defined Naptan IDs for stops mentioned in the route (Used for live platform lookups)
-# NOTE: The standard 910G Naptans were causing 404 errors on the live arrivals StopPoint API.
-# We are switching to the 940GZ<CRS> format, which is often more reliable for National Rail/Overground
-# live data lookups on the TFL API.
-NAPTAN_IDS = {
-    "Streatham Common Rail Station": "940GZSRC",  # SRC - Streatham Common
-    "Clapham Junction Rail Station": "940GZCLJ",  # CLJ - Clapham Junction
-    "Imperial Wharf Rail Station": "940GZIMW",    # IMW - Imperial Wharf
-}
+# NOTE: Live platform lookups have been removed as the TFL StopPoint API frequently
+# returns 404 for these National Rail stations. Platform data will default to "TBC".
+# NAPTAN_IDS dictionary and related platform fetching functions have been deleted.
 
 # --- Utility Functions ---
 
@@ -40,11 +34,7 @@ def retry_fetch(url, params, max_retries=MAX_RETRIES):
             response.raise_for_status()
             return response.json()
         except requests.exceptions.HTTPError as e:
-            # Handle specific 404 error gracefully for the StopPoint/Arrivals endpoint
-            if response.status_code == 404 and "StopPoint" in url:
-                print(f"ERROR fetching data from TFL StopPoint API for {url.split('/')[4]}: 404 Client Error: Not Found.")
-                return None
-            
+            # Removed the 404 StopPoint handling here as the platform fetch functions were removed.
             print(f"ERROR fetching data ({e}): Attempt {attempt + 1}/{max_retries}. Retrying in {2**attempt}s...")
             if attempt < max_retries - 1:
                 time.sleep(2**attempt)
@@ -108,37 +98,6 @@ def extract_valid_train_legs(journeys, expected_destination):
     
     return list(unique_legs)
 
-def get_live_arrivals(naptan_id):
-    """Fetches live arrival board for a given Naptan ID."""
-    url = f"{TFL_BASE_URL}/StopPoint/{naptan_id}/Arrivals"
-    
-    params = {}
-    if TFL_APP_ID and TFL_APP_KEY:
-        params["app_id"] = TFL_APP_ID
-        params["app_key"] = TFL_APP_KEY
-    
-    return retry_fetch(url, params, max_retries=1)
-
-def get_platform_from_tfl_arrivals(live_arrivals, scheduled_departure_time):
-    """Searches live arrivals for a specific train and returns its platform or 'TBC'."""
-    if not live_arrivals:
-        return "TBC"
-
-    scheduled_dt = datetime.strptime(scheduled_departure_time, '%Y-%m-%dT%H:%M:%S')
-
-    for arrival in live_arrivals:
-        # TFL returns 'expectedArrival' for the arrival at the stop
-        expected_arrival_dt = datetime.fromisoformat(arrival.get('expectedArrival'))
-        
-        # Check if the arrival time is within a small window (10 min) of the scheduled time.
-        time_diff = abs(expected_arrival_dt - scheduled_dt)
-        
-        if time_diff < timedelta(minutes=10) and arrival.get('platformName'):
-            platform = arrival['platformName'].replace('Platform ', '')
-            return platform
-            
-    return "TBC"
-
 def group_connections_by_first_leg(first_legs, second_legs, num_segments):
     """Groups valid second legs (connections) under their corresponding first leg."""
     
@@ -151,18 +110,11 @@ def group_connections_by_first_leg(first_legs, second_legs, num_segments):
         # Use a unique key for the first leg
         leg1_key = (leg1['departureTime'], leg1['arrivalTime'])
         
-        # --- Prepare First Leg Data Structure and Live Enrichment ---
+        # --- Prepare First Leg Data Structure ---
         if leg1_key not in grouped_segments:
             
-            # Fetch platform for the origin station (Streatham Common)
-            first_leg_naptan = NAPTAN_IDS.get(leg1['departurePoint']['commonName'])
-            first_leg_arrivals = get_live_arrivals(first_leg_naptan) if first_leg_naptan else None
+            # Live platform data is disabled, default to TBC
             first_platform = "TBC"
-            if first_leg_arrivals:
-                first_platform = get_platform_from_tfl_arrivals(
-                    first_leg_arrivals, 
-                    leg1['departureTime']
-                )
 
             dep_time_l1 = datetime.fromisoformat(leg1['departureTime'])
             arr_time_l1 = datetime.fromisoformat(leg1['arrivalTime'])
@@ -199,15 +151,8 @@ def group_connections_by_first_leg(first_legs, second_legs, num_segments):
             
             if transfer_time_minutes >= MIN_TRANSFER_TIME_MINUTES:
                 
-                # Fetch platform for the interchange station (Clapham Junction)
-                second_leg_naptan = NAPTAN_IDS.get(leg2['departurePoint']['commonName'])
-                second_leg_arrivals = get_live_arrivals(second_leg_naptan) if second_leg_naptan else None
+                # Live platform data is disabled, default to TBC
                 second_platform = "TBC"
-                if second_leg_arrivals:
-                    second_platform = get_platform_from_tfl_arrivals(
-                        second_leg_arrivals, 
-                        leg2['departureTime']
-                    )
 
                 dep_time_l2 = datetime.fromisoformat(leg2['departureTime'])
                 arr_time_l2 = datetime.fromisoformat(leg2['arrivalTime'])
@@ -260,7 +205,6 @@ def group_connections_by_first_leg(first_legs, second_legs, num_segments):
         print(f"✓ Segment {idx + 1} ({segment['first_leg']['departure']} → {segment['first_leg']['arrival']}): Found {len(conn_times)} connections ({', '.join(conn_times)})")
 
     # Limit to NUM_JOURNEYS segments
-    # FIX APPLIED: Changed 'num_journeys' to 'num_segments'
     return final_output[:num_segments]
 
 
@@ -305,6 +249,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
