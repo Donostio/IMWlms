@@ -16,7 +16,7 @@ INTERCHANGE_STATION = "Clapham Junction Rail Station"
 
 # TFL API endpoint
 TFL_BASE_URL = "https://api.tfl.gov.uk"
-NUM_JOURNEYS = 4 # Target the next four best stitched segments (First Legs)
+NUM_JOURNEYS = 8 # Target the next eight best stitched segments (First Legs)
 MIN_TRANSFER_TIME_MINUTES = 3 # Minimum acceptable transfer time
 MAX_RETRIES = 3 # Max retries for API calls
 
@@ -217,10 +217,12 @@ def stitch_and_process_journeys(num_segments):
     # 1. Fetch all unique train legs from Streatham Common to Clapham Junction
     journeys_l1 = get_segment_journeys(ORIGIN, INTERCHANGE_STATION)
     first_legs = extract_valid_train_legs(journeys_l1, INTERCHANGE_STATION)
+    print(f"DEBUG: Found {len(first_legs)} unique legs for the first segment.") # NEW LOGGING
     
     # 2. Fetch all unique train legs from Clapham Junction to Imperial Wharf
     journeys_l2 = get_segment_journeys(INTERCHANGE_STATION, DESTINATION)
     second_legs = extract_valid_train_legs(journeys_l2, DESTINATION)
+    print(f"DEBUG: Found {len(second_legs)} unique legs for the second segment.") # NEW LOGGING
     
     if not first_legs or not second_legs:
         print("ERROR: Could not retrieve sufficient train legs for stitching.")
@@ -249,6 +251,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
