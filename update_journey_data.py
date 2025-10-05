@@ -17,7 +17,7 @@ INTERCHANGE_STATION = "Clapham Junction Rail Station"
 # TFL API endpoint
 TFL_BASE_URL = "https://api.tfl.gov.uk"
 NUM_JOURNEYS = 4 # Target the next four best stitched segments (First Legs)
-MIN_TRANSFER_TIME_MINUTES = 2 # Minimum acceptable transfer time
+MIN_TRANSFER_TIME_MINUTES = 3 # Minimum acceptable transfer time
 MAX_RETRIES = 3 # Max retries for API calls
 
 # Defined Naptan IDs for stops mentioned in the route (Used for live platform lookups)
@@ -137,17 +137,13 @@ def get_platform_from_tfl_arrivals(live_arrivals, scheduled_departure_time):
     return "TBC"
 
 def group_connections_by_first_leg(first_legs, second_legs, num_segments):
-    """
-    Groups valid second legs (connections) under their corresponding first leg
-    based on the minimum transfer time.
-    """
+    """Groups valid second legs (connections) under their corresponding first leg."""
     
     grouped_segments = {}
     
     # Sort first legs by departure time for chronological display
     sorted_first_legs = sorted(first_legs, key=lambda l: datetime.fromisoformat(l['departureTime']))
 
-    # Iterate through the first legs (SCR -> CLJ)
     for leg1 in sorted_first_legs:
         # Use a unique key for the first leg
         leg1_key = (leg1['departureTime'], leg1['arrivalTime'])
@@ -168,15 +164,21 @@ def group_connections_by_first_leg(first_legs, second_legs, num_segments):
             dep_time_l1 = datetime.fromisoformat(leg1['departureTime'])
             arr_time_l1 = datetime.fromisoformat(leg1['arrivalTime'])
             
+            # Extract scheduled time
+            scheduled_dep = leg1.get('scheduledDepartureTime')
+            # Format the scheduled time, default to the expected time if not present
+            scheduled_dep_str = datetime.fromisoformat(scheduled_dep).strftime('%H:%M') if scheduled_dep else dep_time_l1.strftime('%H:%M')
+
             first_leg_data = {
                 "origin": leg1['departurePoint']['commonName'],
                 "destination": leg1['arrivalPoint']['commonName'],
                 "departure": dep_time_l1.strftime('%H:%M'),
+                "scheduled_departure": scheduled_dep_str, # NEW FIELD for displaying delay
                 "arrival": arr_time_l1.strftime('%H:%M'),
                 f"departurePlatform_{leg1['departurePoint']['commonName'].split(' ')[0]}": first_platform,
                 "operator": leg1.get('operator', {}).get('id', 'N/A'),
                 "status": leg1.get('status', 'On Time'),
-                "rawArrivalTime": leg1['arrivalTime'] # Keep raw time for internal calculation
+                "rawArrivalTime": leg1['arrivalTime']
             }
 
             grouped_segments[leg1_key] = {
@@ -184,16 +186,14 @@ def group_connections_by_first_leg(first_legs, second_legs, num_segments):
                 "connections": []
             }
         
-        # --- Find and Process Valid Connections (Second Legs: CLJ -> IW) ---
+        # --- Find and Process Valid Connections (Second Legs) ---
         for leg2 in second_legs:
             arr_time_l1 = datetime.fromisoformat(leg1['arrivalTime'])
             dep_time_l2 = datetime.fromisoformat(leg2['departureTime'])
             
-            # Calculate transfer time
             time_difference = dep_time_l2 - arr_time_l1
             transfer_time_minutes = int(time_difference.total_seconds() / 60)
             
-            # Check the minimum transfer time constraint
             if transfer_time_minutes >= MIN_TRANSFER_TIME_MINUTES:
                 
                 # Fetch platform for the interchange station (Clapham Junction)
@@ -217,7 +217,7 @@ def group_connections_by_first_leg(first_legs, second_legs, num_segments):
                     f"departurePlatform_{leg2['departurePoint']['commonName'].split(' ')[0]}": second_platform,
                     "operator": leg2.get('operator', {}).get('id', 'N/A'),
                     "status": leg2.get('status', 'On Time'),
-                    "rawDepartureTime": leg2['departureTime'] # Keep raw time for internal sorting
+                    "rawDepartureTime": leg2['departureTime'] # Keep raw time for connection sorting
                 }
 
                 # Add the connection
@@ -257,7 +257,7 @@ def group_connections_by_first_leg(first_legs, second_legs, num_segments):
         print(f"✓ Segment {idx + 1} ({segment['first_leg']['departure']} → {segment['first_leg']['arrival']}): Found {len(conn_times)} connections ({', '.join(conn_times)})")
 
     # Limit to NUM_JOURNEYS segments
-    return final_output[:num_segments]
+    return final_output[:num_journeys]
 
 
 def stitch_and_process_journeys(num_segments):
@@ -287,7 +287,7 @@ def stitch_and_process_journeys(num_segments):
 
     return processed_segments
 
-
+# The main function is now simplified to use the new stitching logic
 def main():
     data = stitch_and_process_journeys(NUM_JOURNEYS)
     
@@ -301,4 +301,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
