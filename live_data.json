@@ -4,96 +4,96 @@
         "first_leg": {
             "origin": "Streatham Common Rail Station",
             "destination": "Imperial Wharf Rail Station",
-            "departure": "12:50",
-            "scheduled_departure": "12:50",
-            "arrival": "13:25",
-            "departurePlatform_SRC": "2",
-            "operator": "London Overground",
+            "departure": "13:00",
+            "scheduled_departure": "13:00",
+            "arrival": "13:31",
+            "departurePlatform_SRC": "1",
+            "operator": "South Western Railway",
             "status": "Cancelled"
         },
         "connections": [],
-        "totalDuration": "35 min",
-        "arrivalTime": "13:25",
-        "departureTime": "12:50",
+        "totalDuration": "31 min",
+        "arrivalTime": "13:31",
+        "departureTime": "13:00",
         "segment_id": 1,
-        "live_updated_at": "12:40:32"
+        "live_updated_at": "12:55:27"
     },
     {
         "type": "One Change",
         "first_leg": {
             "origin": "Streatham Common Rail Station",
             "destination": "Clapham Junction Rail Station",
-            "departure": "13:00",
-            "scheduled_departure": "13:00",
-            "arrival": "13:12",
+            "departure": "13:10",
+            "scheduled_departure": "13:10",
+            "arrival": "13:23",
             "departurePlatform_SRC": "2",
-            "operator": "London Overground",
+            "operator": "Southern",
             "status": "Cancelled"
         },
         "connections": [
             {
-                "transferTime": "6 min",
+                "transferTime": "5 min",
                 "second_leg": {
                     "origin": "Clapham Junction Rail Station",
                     "destination": "Imperial Wharf Rail Station",
-                    "departure": "13:18",
-                    "scheduled_departure": "13:18",
-                    "arrival": "13:24",
+                    "departure": "13:28",
+                    "scheduled_departure": "13:28",
+                    "arrival": "13:34",
                     "departurePlatform_CLJ": "1",
-                    "operator": "Southern",
+                    "operator": "South Western Railway",
                     "status": "Cancelled"
                 }
             },
             {
-                "transferTime": "13 min",
+                "transferTime": "12 min",
                 "second_leg": {
                     "origin": "Clapham Junction Rail Station",
                     "destination": "Imperial Wharf Rail Station",
-                    "departure": "13:25",
-                    "scheduled_departure": "13:25",
-                    "arrival": "13:30",
-                    "departurePlatform_CLJ": "4",
-                    "operator": "Southern",
-                    "status": "Cancelled"
-                }
-            },
-            {
-                "transferTime": "20 min",
-                "second_leg": {
-                    "origin": "Clapham Junction Rail Station",
-                    "destination": "Imperial Wharf Rail Station",
-                    "departure": "13:32",
-                    "scheduled_departure": "13:32",
-                    "arrival": "13:37",
+                    "departure": "13:35",
+                    "scheduled_departure": "13:35",
+                    "arrival": "13:41",
                     "departurePlatform_CLJ": "5",
+                    "operator": "London Overground",
+                    "status": "On Time"
+                }
+            },
+            {
+                "transferTime": "19 min",
+                "second_leg": {
+                    "origin": "Clapham Junction Rail Station",
+                    "destination": "Imperial Wharf Rail Station",
+                    "departure": "13:42",
+                    "scheduled_departure": "13:42",
+                    "arrival": "13:48",
+                    "departurePlatform_CLJ": "3",
                     "operator": "South Western Railway",
                     "status": "Cancelled"
                 }
             }
         ],
-        "totalDuration": "37 min",
-        "arrivalTime": "13:24",
-        "departureTime": "13:00",
+        "totalDuration": "38 min",
+        "arrivalTime": "13:34",
+        "departureTime": "13:10",
         "segment_id": 2,
-        "live_updated_at": "12:40:32"
+        "live_updated_at": "12:55:27"
     },
     {
         "type": "Direct",
         "first_leg": {
             "origin": "Streatham Common Rail Station",
             "destination": "Imperial Wharf Rail Station",
-            "departure": "13:10",
-            "scheduled_departure": "13:10",
-            "arrival": "13:40",
+            "departure": "13:20",
+            "scheduled_departure": "13:20",
+            "arrival": "13:54",
             "departurePlatform_SRC": "1",
             "operator": "South Western Railway",
             "status": "On Time"
         },
         "connections": [],
-        "totalDuration": "30 min",
-        "arrivalTime": "13:40",
-        "departureTime": "13:10",
+        "totalDuration": "34 min",
+        "arrivalTime": "13:54",
+        "departureTime": "13:20",
         "segment_id": 3,
-        "live_updated_at": "12:40:32"
+        "live_updated_at": "12:55:27"
     }
 ]
