@@ -100,9 +100,6 @@
             const claphamPlatformKey = Object.keys(secondLeg).find(key => key.startsWith('departurePlatform_Clapham'));
             const claphamPlatform = secondLeg[claphamPlatformKey] || 'TBC';
             
-            // Calculate leg duration (kept for potential future use, but removed from display)
-            const secondLegDuration = calculateDuration(secondLeg.departure, secondLeg.arrival);
-
             // Second Leg Operator Color
             const operatorId = secondLeg.operator;
             let operatorColor = 'text-gray-400';
@@ -115,11 +112,12 @@
             return `
                 <div class="p-3 border border-gray-700 rounded-lg bg-gray-900 space-y-2">
                     
-                    <!-- Second Leg Details: Departure/Transfer/Arrival/Platform/Operator -->
+                    <!-- Connection Header & Platform/Operator -->
                     <div class="flex justify-between text-sm items-center pb-1 border-b border-gray-800">
-                        <div class="w-1/2 font-medium text-white">
-                            <!-- New Title: Departure Time - Transfer Time (Bolder, Primary focus) -->
-                            <span class="block text-lg font-bold text-yellow-400">${secondLeg.departure} - ${transferTime} transfer</span>
+                        
+                        <div class="w-1/2 font-medium">
+                            <!-- New Title: Departure Time [White] (Transfer Time [Yellow]) -->
+                            <span class="block text-lg font-bold text-white">${secondLeg.departure} <span class="text-yellow-400 font-normal">(${transferTime} transfer)</span></span>
                             
                             <!-- New Row: Arrives at IMW at Arrival Time -->
                             <span class="text-xs text-gray-400 block pt-1">Arrives at IMW at <span class="text-white font-semibold">${secondLeg.arrival}</span></span>
@@ -131,13 +129,8 @@
                         </div>
                     </div>
 
-                    <!-- Transfer Location (Simplified from previous 'Transfer Row') -->
-                    <div class="flex justify-end text-xs text-gray-400">
-                        at Clapham Junction
-                    </div>
-
-                    <!-- Total Duration Display -->
-                    <div class="flex justify-end pt-1 border-t border-gray-800">
+                    <!-- Total Duration Display (Moved outside the transfer section for clarity) -->
+                    <div class="flex justify-end pt-1">
                         <p class="font-bold text-sm text-green-400">Total Journey: ${totalDurationToDisplay}</p>
                     </div>
                 </div>
@@ -178,45 +171,49 @@
             // Determine the destination text based on journey type
             const destinationText = isDirect ? 'Imperial Wharf' : 'Clapham Jcn';
             
-            // New label based on user request
+            // New label based on user request (no longer used as header label is removed)
             const firstLegLabel = isDirect ? 'DIRECT' : 'To Clapham Junct only';
 
 
             return `
                 <div class="card-bg p-4 sm:p-6 rounded-xl border border-gray-800 space-y-3">
                     
-                    <!-- Main Header Row: Departure/Arrival Time, Duration, and Status -->
-                    <div class="flex justify-between items-center pb-2">
-                        <div class="flex items-baseline space-x-3">
-                            <h3 class="text-3xl font-extrabold text-white">
-                                ${firstLeg.departure} - ${firstLeg.arrival}
-                            </h3>
-                            <span class="text-base font-medium text-gray-400">(${firstLegDuration} mins)</span>
-                        </div>
-                        <span class="text-sm font-semibold p-1 px-2 rounded ${journey.status === 'On Time' ? 'bg-green-600' : 'bg-red-600'} text-white">
-                            ${journey.status}
-                        </span>
-                    </div>
-                    
-                    <!-- LEG 1 / DIRECT INFO (Simplified) -->
-                    <div class="space-y-2 border-b border-gray-700 pb-3">
-                        <div class="flex justify-between text-sm items-center p-2 rounded bg-gray-900">
-                            <div class="font-medium text-white">
-                                <span class="block text-base font-bold">${firstLegLabel}</span>
-                                <span class="block text-xs text-gray-400">${journey.type} Journey</span>
+                    <!-- Main Header/Info Block (New Combined Structure) -->
+                    <div class="space-y-1 border-b border-gray-700 pb-3">
+                        
+                        <!-- Row 1: Times, Change Notice, Status, Platform -->
+                        <div class="flex justify-between items-center">
+                            <div class="flex items-baseline space-x-2">
+                                <h3 class="text-3xl font-extrabold text-white">
+                                    ${firstLeg.departure} - ${firstLeg.arrival}
+                                </h3>
+                                ${!isDirect ? `<span class="text-base font-bold text-rail-blue">CHANGE AT CLJ</span>` : ''}
                             </div>
+                            
                             <div class="text-right">
-                                <span class="block text-xs text-gray-400">Platform: <span class="font-semibold text-white">${streathamPlatform}</span></span>
-                                <span class="block text-xs ${operatorColor} font-semibold">${firstLeg.operator}</span>
+                                <span class="text-sm font-semibold p-1 px-2 rounded ${journey.status === 'On Time' ? 'bg-green-600' : 'bg-red-600'} text-white block mb-1">
+                                    ${journey.status}
+                                </span>
+                                <span class="text-xs text-gray-400 block">
+                                    Platform: <span class="font-semibold text-white">${streathamPlatform}</span>
+                                </span>
                             </div>
                         </div>
 
-                        ${isDirect ? `
-                            <div class="text-center pt-2">
-                                <p class="text-lg font-bold text-green-400">Total Journey: ${journey.totalDuration}</p>
+                        <!-- Row 2: Duration, Operator, and Direct Journey Total Time -->
+                        <div class="flex justify-between items-center text-sm">
+                            <div class="flex items-baseline space-x-3 text-gray-400">
+                                <span class="text-base font-medium">(${firstLegDuration} mins)</span>
+                                <span class="block text-xs ${operatorColor} font-semibold">${firstLeg.operator}</span>
+                                ${isDirect ? `<span class="block text-xs text-gray-400">${journey.type} Journey</span>` : ''}
                             </div>
-                        ` : ''}
+                            
+                            ${isDirect ? `
+                                <p class="font-bold text-sm text-green-400">Total Journey: ${journey.totalDuration}</p>
+                            ` : ''}
+                        </div>
                     </div>
+
 
                     <!-- CONNECTIONS LIST (for One Change journeys only) -->
                     ${!isDirect && journey.connections ? `
