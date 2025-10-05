@@ -106,6 +106,13 @@ def group_connections_by_first_leg(first_legs, second_legs, num_segments):
     # Sort first legs by departure time for chronological display
     sorted_first_legs = sorted(first_legs, key=lambda l: datetime.fromisoformat(l['departureTime']))
 
+    # --- DEBUGGING: Display available legs for clarity ---
+    l1_departures = [datetime.fromisoformat(l['departureTime']).strftime('%H:%M') for l in sorted_first_legs]
+    l2_departures = [datetime.fromisoformat(l['departureTime']).strftime('%H:%M') for l in second_legs]
+    print(f"DEBUG: L1 (Streatham Common → Clapham Junction) Departures: {', '.join(l1_departures)}")
+    print(f"DEBUG: L2 (Clapham Junction → Imperial Wharf) Departures: {', '.join(l2_departures)}")
+    # --- END DEBUGGING ---
+
     for leg1 in sorted_first_legs:
         # Use a unique key for the first leg
         leg1_key = (leg1['departureTime'], leg1['arrivalTime'])
@@ -149,8 +156,8 @@ def group_connections_by_first_leg(first_legs, second_legs, num_segments):
             time_difference = dep_time_l2 - arr_time_l1
             transfer_time_minutes = int(time_difference.total_seconds() / 60)
             
-            # DEBUG: Log the transfer time for every combination
-            print(f"DEBUG: L1 Arr {leg1['arrivalTime'][11:16]} ({leg1_key[0][11:16]}) vs L2 Dep {leg2['departureTime'][11:16]}. Transfer: {transfer_time_minutes} min. Required: {MIN_TRANSFER_TIME_MINUTES} min.")
+            # The previous detailed per-combination print is removed for cleaner logs.
+            # The logic here correctly filters out negative/too short transfers.
             
             if transfer_time_minutes >= MIN_TRANSFER_TIME_MINUTES:
                 
@@ -254,6 +261,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
