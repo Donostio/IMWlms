@@ -128,8 +128,10 @@ def group_connections_by_first_leg(first_legs, second_legs, num_segments):
         # --- Prepare First Leg Data Structure ---
         if leg1_key not in grouped_segments:
             
-            # Live platform data is disabled, default to TBC
-            first_platform = "TBC"
+            # PLATFORM EXTRACTION LOGIC:
+            # Check for the 'platform' field directly on the leg object.
+            # Use 'TBC' if the platform is not present in the scheduled data.
+            first_platform = leg1.get('platform', 'TBC')
 
             dep_time_l1 = datetime.fromisoformat(leg1['departureTime'])
             arr_time_l1 = datetime.fromisoformat(leg1['arrivalTime'])
@@ -145,6 +147,7 @@ def group_connections_by_first_leg(first_legs, second_legs, num_segments):
                 "departure": dep_time_l1.strftime('%H:%M'),
                 "scheduled_departure": scheduled_dep_str, # NEW FIELD for displaying delay
                 "arrival": arr_time_l1.strftime('%H:%M'),
+                # Use the extracted platform here
                 f"departurePlatform_{leg1['departurePoint']['commonName'].split(' ')[0]}": first_platform,
                 "operator": leg1.get('operator', {}).get('id', 'N/A'),
                 "status": leg1.get('status', 'On Time'),
@@ -169,8 +172,10 @@ def group_connections_by_first_leg(first_legs, second_legs, num_segments):
             
             if transfer_time_minutes >= MIN_TRANSFER_TIME_MINUTES:
                 
-                # Live platform data is disabled, default to TBC
-                second_platform = "TBC"
+                # PLATFORM EXTRACTION LOGIC:
+                # Check for the 'platform' field directly on the leg object.
+                # Use 'TBC' if the platform is not present in the scheduled data.
+                second_platform = leg2.get('platform', 'TBC')
 
                 dep_time_l2 = datetime.fromisoformat(leg2['departureTime'])
                 arr_time_l2 = datetime.fromisoformat(leg2['arrivalTime'])
@@ -180,6 +185,7 @@ def group_connections_by_first_leg(first_legs, second_legs, num_segments):
                     "destination": leg2['arrivalPoint']['commonName'],
                     "departure": dep_time_l2.strftime('%H:%M'),
                     "arrival": arr_time_l2.strftime('%H:%M'),
+                    # Use the extracted platform here
                     f"departurePlatform_{leg2['departurePoint']['commonName'].split(' ')[0]}": second_platform,
                     "operator": leg2.get('operator', {}).get('id', 'N/A'),
                     "status": leg2.get('status', 'On Time'),
@@ -223,7 +229,7 @@ def group_connections_by_first_leg(first_legs, second_legs, num_segments):
         print(f"✓ Segment {idx + 1} ({segment['first_leg']['departure']} → {segment['first_leg']['arrival']}): Found {len(conn_times)} connections ({', '.join(conn_times)})")
 
     # Limit to NUM_JOURNEYS segments
-    return final_output[:num_segments]
+    return final_output[:num_journeys]
 
 
 def stitch_and_process_journeys(num_segments):
@@ -237,15 +243,18 @@ def stitch_and_process_journeys(num_segments):
     first_legs = extract_valid_train_legs(journeys_l1, INTERCHANGE_STATION)
     print(f"DEBUG: Found {len(first_legs)} unique legs for the first segment.")
     
+    if not first_legs:
+        print("ERROR: Could not retrieve any first train legs.")
+        return []
+    
     # 2. Fetch all unique train legs from Clapham Junction to Imperial Wharf
-    # To ensure we capture connections for later L1 segments (e.g., 11:20 and 11:50), 
-    # we force the search to look 90 minutes into the future to get a wider range of connecting trains.
+    # Look 90 minutes into the future to ensure we capture a good range of connecting trains.
     future_time = datetime.now() + timedelta(minutes=90)
     journeys_l2 = get_segment_journeys(INTERCHANGE_STATION, DESTINATION, departure_time=future_time)
     second_legs = extract_valid_train_legs(journeys_l2, DESTINATION)
     print(f"DEBUG: Found {len(second_legs)} unique legs for the second segment.")
     
-    if not first_legs or not second_legs:
+    if not second_legs:
         print("ERROR: Could not retrieve sufficient train legs for stitching.")
         return []
 
