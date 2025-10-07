@@ -4,7 +4,7 @@
         "first_leg": {
             "origin": "Streatham Common Rail Station",
             "destination": "Clapham Junction Rail Station",
-            "departure": "10:20",
+            "departure": "10:22",
             "scheduled_departure": "10:19",
             "arrival": "10:31",
             "departurePlatform_Streatham": "TBC",
@@ -109,11 +109,11 @@
                 }
             }
         ],
-        "totalDuration": "20 min",
+        "totalDuration": "18 min",
         "arrivalTime": "10:40",
-        "departureTime": "10:20",
+        "departureTime": "10:22",
         "segment_id": 1,
-        "live_updated_at": "10:07:12"
+        "live_updated_at": "10:18:50"
     },
     {
         "type": "Direct",
@@ -133,7 +133,7 @@
         },
         "connections": [],
         "segment_id": 2,
-        "live_updated_at": "10:07:12"
+        "live_updated_at": "10:18:50"
     },
     {
         "type": "One Change",
@@ -237,7 +237,7 @@
         "arrivalTime": "10:43",
         "departureTime": "10:25",
         "segment_id": 3,
-        "live_updated_at": "10:07:12"
+        "live_updated_at": "10:18:50"
     },
     {
         "type": "Direct",
@@ -257,6 +257,6 @@
         },
         "connections": [],
         "segment_id": 4,
-        "live_updated_at": "10:07:12"
+        "live_updated_at": "10:18:50"
     }
 ]
