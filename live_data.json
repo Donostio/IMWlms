@@ -95,13 +95,25 @@
                     "operator": "N/A",
                     "status": "On Time"
                 }
+            },
+            {
+                "transferTime": "93 min",
+                "second_leg": {
+                    "origin": "Clapham Junction Rail Station",
+                    "destination": "Imperial Wharf Rail Station",
+                    "departure": "23:04",
+                    "arrival": "23:08",
+                    "departurePlatform_Clapham": "TBC",
+                    "operator": "N/A",
+                    "status": "On Time"
+                }
             }
         ],
         "totalDuration": "16 min",
         "arrivalTime": "21:38",
         "departureTime": "21:22",
         "segment_id": 1,
-        "live_updated_at": "21:05:28"
+        "live_updated_at": "21:16:53"
     },
     {
         "type": "Direct",
@@ -121,7 +133,7 @@
         },
         "connections": [],
         "segment_id": 2,
-        "live_updated_at": "21:05:28"
+        "live_updated_at": "21:16:53"
     },
     {
         "type": "One Change",
@@ -207,13 +219,25 @@
                     "operator": "N/A",
                     "status": "On Time"
                 }
+            },
+            {
+                "transferTime": "90 min",
+                "second_leg": {
+                    "origin": "Clapham Junction Rail Station",
+                    "destination": "Imperial Wharf Rail Station",
+                    "departure": "23:04",
+                    "arrival": "23:08",
+                    "departurePlatform_Clapham": "TBC",
+                    "operator": "N/A",
+                    "status": "On Time"
+                }
             }
         ],
         "totalDuration": "17 min",
         "arrivalTime": "21:42",
         "departureTime": "21:25",
         "segment_id": 3,
-        "live_updated_at": "21:05:28"
+        "live_updated_at": "21:16:53"
     },
     {
         "type": "Direct",
@@ -233,6 +257,6 @@
         },
         "connections": [],
         "segment_id": 4,
-        "live_updated_at": "21:05:28"
+        "live_updated_at": "21:16:53"
     }
 ]
