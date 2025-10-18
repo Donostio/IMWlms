@@ -13,6 +13,18 @@
         },
         "connections": [
             {
+                "transferTime": "540 min",
+                "second_leg": {
+                    "origin": "Clapham Junction Rail Station",
+                    "destination": "Imperial Wharf Rail Station",
+                    "departure": "07:31",
+                    "arrival": "07:35",
+                    "departurePlatform_Clapham": "TBC",
+                    "operator": "N/A",
+                    "status": "On Time"
+                }
+            },
+            {
                 "transferTime": "3 min",
                 "second_leg": {
                     "origin": "Clapham Junction Rail Station",
@@ -97,11 +109,11 @@
                 }
             }
         ],
-        "totalDuration": "19 min",
-        "arrivalTime": "22:38",
+        "totalDuration": "556 min",
+        "arrivalTime": "07:35",
         "departureTime": "22:19",
         "segment_id": 1,
-        "live_updated_at": "22:04:36"
+        "live_updated_at": "22:14:41"
     },
     {
         "type": "Direct",
@@ -121,7 +133,7 @@
         },
         "connections": [],
         "segment_id": 2,
-        "live_updated_at": "22:04:36"
+        "live_updated_at": "22:14:41"
     },
     {
         "type": "One Change",
@@ -136,6 +148,18 @@
             "status": "On Time"
         },
         "connections": [
+            {
+                "transferTime": "537 min",
+                "second_leg": {
+                    "origin": "Clapham Junction Rail Station",
+                    "destination": "Imperial Wharf Rail Station",
+                    "departure": "07:31",
+                    "arrival": "07:35",
+                    "departurePlatform_Clapham": "TBC",
+                    "operator": "N/A",
+                    "status": "On Time"
+                }
+            },
             {
                 "transferTime": "5 min",
                 "second_leg": {
@@ -209,10 +233,10 @@
                 }
             }
         ],
-        "totalDuration": "18 min",
-        "arrivalTime": "22:43",
+        "totalDuration": "550 min",
+        "arrivalTime": "07:35",
         "departureTime": "22:25",
         "segment_id": 3,
-        "live_updated_at": "22:04:36"
+        "live_updated_at": "22:14:41"
     }
 ]
