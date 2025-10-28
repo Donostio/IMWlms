@@ -17,23 +17,23 @@
         },
         "connections": [],
         "segment_id": 1,
-        "live_updated_at": "15:52:16"
+        "live_updated_at": "15:59:05"
     },
     {
         "type": "One Change",
         "first_leg": {
             "origin": "Streatham Common Rail Station",
             "destination": "Clapham Junction Rail Station",
-            "departure": "16:10",
+            "departure": "16:13",
             "scheduled_departure": "16:10",
-            "arrival": "16:20",
+            "arrival": "16:22",
             "departurePlatform_Streatham": "TBC",
             "operator": "N/A",
             "status": "On Time"
         },
         "connections": [
             {
-                "transferTime": "763 min",
+                "transferTime": "761 min",
                 "second_leg": {
                     "origin": "Clapham Junction Rail Station",
                     "destination": "Imperial Wharf Rail Station",
@@ -45,7 +45,7 @@
                 }
             },
             {
-                "transferTime": "813 min",
+                "transferTime": "811 min",
                 "second_leg": {
                     "origin": "Clapham Junction Rail Station",
                     "destination": "Imperial Wharf Rail Station",
@@ -57,7 +57,7 @@
                 }
             },
             {
-                "transferTime": "820 min",
+                "transferTime": "818 min",
                 "second_leg": {
                     "origin": "Clapham Junction Rail Station",
                     "destination": "Imperial Wharf Rail Station",
@@ -69,7 +69,7 @@
                 }
             },
             {
-                "transferTime": "829 min",
+                "transferTime": "827 min",
                 "second_leg": {
                     "origin": "Clapham Junction Rail Station",
                     "destination": "Imperial Wharf Rail Station",
@@ -81,7 +81,7 @@
                 }
             },
             {
-                "transferTime": "843 min",
+                "transferTime": "841 min",
                 "second_leg": {
                     "origin": "Clapham Junction Rail Station",
                     "destination": "Imperial Wharf Rail Station",
@@ -93,7 +93,7 @@
                 }
             },
             {
-                "transferTime": "853 min",
+                "transferTime": "851 min",
                 "second_leg": {
                     "origin": "Clapham Junction Rail Station",
                     "destination": "Imperial Wharf Rail Station",
@@ -105,7 +105,7 @@
                 }
             },
             {
-                "transferTime": "858 min",
+                "transferTime": "856 min",
                 "second_leg": {
                     "origin": "Clapham Junction Rail Station",
                     "destination": "Imperial Wharf Rail Station",
@@ -117,7 +117,7 @@
                 }
             },
             {
-                "transferTime": "868 min",
+                "transferTime": "866 min",
                 "second_leg": {
                     "origin": "Clapham Junction Rail Station",
                     "destination": "Imperial Wharf Rail Station",
@@ -129,7 +129,7 @@
                 }
             },
             {
-                "transferTime": "878 min",
+                "transferTime": "876 min",
                 "second_leg": {
                     "origin": "Clapham Junction Rail Station",
                     "destination": "Imperial Wharf Rail Station",
@@ -141,11 +141,11 @@
                 }
             }
         ],
-        "totalDuration": "777 min",
+        "totalDuration": "774 min",
         "arrivalTime": "05:07",
-        "departureTime": "16:10",
+        "departureTime": "16:13",
         "segment_id": 2,
-        "live_updated_at": "15:52:16"
+        "live_updated_at": "15:59:05"
     },
     {
         "type": "One Change",
@@ -273,7 +273,7 @@
         "arrivalTime": "05:07",
         "departureTime": "16:19",
         "segment_id": 3,
-        "live_updated_at": "15:52:16"
+        "live_updated_at": "15:59:05"
     },
     {
         "type": "One Change",
@@ -401,6 +401,6 @@
         "arrivalTime": "05:07",
         "departureTime": "16:40",
         "segment_id": 4,
-        "live_updated_at": "15:52:16"
+        "live_updated_at": "15:59:05"
     }
 ]
