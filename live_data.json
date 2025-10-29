@@ -4,7 +4,7 @@
         "first_leg": {
             "origin": "Streatham Common Rail Station",
             "destination": "Clapham Junction Rail Station",
-            "departure": "09:39",
+            "departure": "09:40",
             "scheduled_departure": "09:39",
             "arrival": "09:50",
             "departurePlatform_Streatham": "TBC",
@@ -83,13 +83,25 @@
                     "operator": "N/A",
                     "status": "On Time"
                 }
+            },
+            {
+                "transferTime": "90 min",
+                "second_leg": {
+                    "origin": "Clapham Junction Rail Station",
+                    "destination": "Imperial Wharf Rail Station",
+                    "departure": "11:20",
+                    "arrival": "11:24",
+                    "departurePlatform_Clapham": "TBC",
+                    "operator": "N/A",
+                    "status": "On Time"
+                }
             }
         ],
-        "totalDuration": "25 min",
+        "totalDuration": "24 min",
         "arrivalTime": "10:04",
-        "departureTime": "09:39",
+        "departureTime": "09:40",
         "segment_id": 1,
-        "live_updated_at": "09:29:19"
+        "live_updated_at": "09:40:27"
     },
     {
         "type": "One Change",
@@ -163,13 +175,25 @@
                     "operator": "N/A",
                     "status": "On Time"
                 }
+            },
+            {
+                "transferTime": "79 min",
+                "second_leg": {
+                    "origin": "Clapham Junction Rail Station",
+                    "destination": "Imperial Wharf Rail Station",
+                    "departure": "11:20",
+                    "arrival": "11:24",
+                    "departurePlatform_Clapham": "TBC",
+                    "operator": "N/A",
+                    "status": "On Time"
+                }
             }
         ],
         "totalDuration": "38 min",
         "arrivalTime": "10:27",
         "departureTime": "09:49",
         "segment_id": 2,
-        "live_updated_at": "09:29:19"
+        "live_updated_at": "09:40:27"
     },
     {
         "type": "Direct",
@@ -189,6 +213,6 @@
         },
         "connections": [],
         "segment_id": 3,
-        "live_updated_at": "09:29:19"
+        "live_updated_at": "09:40:27"
     }
 ]
