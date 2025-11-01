@@ -113,7 +113,7 @@
         "arrivalTime": "09:38",
         "departureTime": "09:19",
         "segment_id": 1,
-        "live_updated_at": "09:08:14"
+        "live_updated_at": "09:19:49"
     },
     {
         "type": "Direct",
@@ -133,7 +133,7 @@
         },
         "connections": [],
         "segment_id": 2,
-        "live_updated_at": "09:08:14"
+        "live_updated_at": "09:19:49"
     },
     {
         "type": "One Change",
@@ -237,7 +237,7 @@
         "arrivalTime": "09:44",
         "departureTime": "09:25",
         "segment_id": 3,
-        "live_updated_at": "09:08:14"
+        "live_updated_at": "09:19:49"
     },
     {
         "type": "Direct",
@@ -257,6 +257,6 @@
         },
         "connections": [],
         "segment_id": 4,
-        "live_updated_at": "09:08:14"
+        "live_updated_at": "09:19:49"
     }
 ]
