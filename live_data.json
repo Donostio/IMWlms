@@ -125,7 +125,7 @@
         "arrivalTime": "09:33",
         "departureTime": "08:50",
         "segment_id": 1,
-        "live_updated_at": "08:40:35"
+        "live_updated_at": "08:48:13"
     },
     {
         "type": "One Change",
@@ -241,7 +241,7 @@
         "arrivalTime": "09:48",
         "departureTime": "09:23",
         "segment_id": 2,
-        "live_updated_at": "08:40:35"
+        "live_updated_at": "08:48:13"
     },
     {
         "type": "One Change",
@@ -333,6 +333,6 @@
         "arrivalTime": "10:17",
         "departureTime": "09:50",
         "segment_id": 3,
-        "live_updated_at": "08:40:35"
+        "live_updated_at": "08:48:13"
     }
 ]
