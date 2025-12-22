@@ -73,6 +73,18 @@
                 }
             },
             {
+                "transferTime": "422 min",
+                "second_leg": {
+                    "origin": "Clapham Junction Rail Station",
+                    "destination": "Imperial Wharf Rail Station",
+                    "departure": "06:33",
+                    "arrival": "06:37",
+                    "departurePlatform_Clapham": "TBC",
+                    "operator": "N/A",
+                    "status": "On Time"
+                }
+            },
+            {
                 "transferTime": "15 min",
                 "second_leg": {
                     "origin": "Clapham Junction Rail Station",
@@ -89,7 +101,7 @@
         "arrivalTime": "05:08",
         "departureTime": "23:21",
         "segment_id": 1,
-        "live_updated_at": "22:59:01"
+        "live_updated_at": "23:08:52"
     },
     {
         "type": "One Change",
@@ -163,12 +175,24 @@
                     "operator": "N/A",
                     "status": "On Time"
                 }
+            },
+            {
+                "transferTime": "392 min",
+                "second_leg": {
+                    "origin": "Clapham Junction Rail Station",
+                    "destination": "Imperial Wharf Rail Station",
+                    "departure": "06:33",
+                    "arrival": "06:37",
+                    "departurePlatform_Clapham": "TBC",
+                    "operator": "N/A",
+                    "status": "On Time"
+                }
             }
         ],
         "totalDuration": "319 min",
         "arrivalTime": "05:08",
         "departureTime": "23:49",
         "segment_id": 2,
-        "live_updated_at": "22:59:01"
+        "live_updated_at": "23:08:52"
     }
 ]
