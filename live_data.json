@@ -4,7 +4,7 @@
         "first_leg": {
             "origin": "Streatham Common Rail Station",
             "destination": "Clapham Junction Rail Station",
-            "departure": "22:51",
+            "departure": "22:53",
             "scheduled_departure": "22:51",
             "arrival": "23:02",
             "departurePlatform_Streatham": "TBC",
@@ -49,6 +49,18 @@
                 }
             },
             {
+                "transferTime": "427 min",
+                "second_leg": {
+                    "origin": "Clapham Junction Rail Station",
+                    "destination": "Imperial Wharf Rail Station",
+                    "departure": "06:09",
+                    "arrival": "06:13",
+                    "departurePlatform_Clapham": "TBC",
+                    "operator": "N/A",
+                    "status": "On Time"
+                }
+            },
+            {
                 "transferTime": "12 min",
                 "second_leg": {
                     "origin": "Clapham Junction Rail Station",
@@ -85,11 +97,11 @@
                 }
             }
         ],
-        "totalDuration": "376 min",
+        "totalDuration": "374 min",
         "arrivalTime": "05:07",
-        "departureTime": "22:51",
+        "departureTime": "22:53",
         "segment_id": 1,
-        "live_updated_at": "22:30:25"
+        "live_updated_at": "22:45:26"
     },
     {
         "type": "One Change",
@@ -141,6 +153,18 @@
                 }
             },
             {
+                "transferTime": "396 min",
+                "second_leg": {
+                    "origin": "Clapham Junction Rail Station",
+                    "destination": "Imperial Wharf Rail Station",
+                    "departure": "06:09",
+                    "arrival": "06:13",
+                    "departurePlatform_Clapham": "TBC",
+                    "operator": "N/A",
+                    "status": "On Time"
+                }
+            },
+            {
                 "transferTime": "11 min",
                 "second_leg": {
                     "origin": "Clapham Junction Rail Station",
@@ -157,6 +181,6 @@
         "arrivalTime": "05:07",
         "departureTime": "23:22",
         "segment_id": 2,
-        "live_updated_at": "22:30:25"
+        "live_updated_at": "22:45:26"
     }
 ]
